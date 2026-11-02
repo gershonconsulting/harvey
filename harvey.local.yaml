@@ -1,0 +1,113 @@
+persona:
+  name: Olivier Attia
+  company: Gershon Consulting
+  role: Founder & Managing Director
+  email: ''
+  linkedin: linkedin.com/in/olivierattia
+  tone: direct, peer-to-peer founder, consultative, never salesy
+product:
+  name: Gershon Consulting — US pipeline without a US sales team
+  description: 'Gershon Consulting (Delaware, since 2013) builds a recurring US sales pipeline for international tech companies
+    entering the US, mainly through LinkedIn social selling (Promote–Network–Engage): content, targeted outreach to US buyers,
+    distributors and investors, and turning replies into booked meetings — so the client does not have to hire a US sales
+    team.'
+  pricing: Not published — scoped on a free 30-minute US growth call
+  key_benefits:
+  - Recurring US pipeline from the first weeks (median first opportunity ~day 7)
+  - No need to hire or manage a US sales team before the market is proven
+  - Weekly visibility into campaign activity plus talking points for every sales call
+  - 13 years, 200+ clients from 20+ countries, 4,800+ opportunities, 799 meetings booked across 48 LinkedIn campaigns
+  objection_responses:
+    too expensive: Fair. The comparison is usually a first US sales hire — salary, ramp time, and the risk the market isn't
+      ready. We prove the pipeline first; happy to walk through what that looks like on a 30-min call.
+    already have a solution: Makes sense. Is it producing US meetings every month today, or mostly activity? That's the gap
+      we usually get asked about.
+    not interested: No problem. Is the US simply not a priority this year, or is it already covered?
+    not the right time: Understood — when would the US be on the plan? I can reach back out then.
+  offer:
+    primary: Outsourced US pipeline generation (LinkedIn social selling, monthly campaign)
+    entry: Free 30-minute US growth call with founder Olivier Attia
+    goal: book_call
+    booking_method: calendar_link
+    booking_url: https://www.gershonconsulting.com/calendar
+    meeting_duration: 30 minutes
+    meeting_owner: Olivier Attia
+icp:
+  industries:
+  - Software
+  - SaaS
+  - Technology
+  - Deep tech
+  - Medtech
+  - Cleantech
+  company_size: 1-19 employees, over USD 1M annual sales
+  titles:
+  - CEO
+  - Founder
+  - Co-Founder
+  - Managing Director
+  - Geschäftsführer
+  - Directeur
+  geography:
+  - United Kingdom
+  - Germany
+  - Netherlands
+  hiring_signals:
+  - Head of US Sales
+  - US Sales
+  - North America Sales
+  - Business Development Manager USA
+  - Account Executive US
+  - VP Sales North America
+  - US Country Manager
+channels:
+  email:
+    enabled: true
+    provider: gmail
+    max_daily_sends: 30
+    require_approval: true
+    send_to_risky: false
+    max_bounce_rate: 0.05
+    warmup:
+      start_date: ''
+      min_days: 14
+      start_sends: 5
+      daily_increase: 3
+      dkim_selector: ''
+    signature:
+      logo: ''
+      width: 120
+      alt: ''
+      link: ''
+      direction: auto
+    send_window:
+      start: 08:00
+      end: '17:00'
+      weekdays_only: true
+      recipient_timezone: true
+    link_domains:
+    - gershonconsulting.com
+  linkedin:
+    enabled: false
+    max_daily_connections: 20
+    max_daily_messages: 10
+usage:
+  max_daily_claude_percent: 80
+  heartbeat_interval_minutes: 15
+  quiet_hours:
+    start: '22:00'
+    end: 07:00
+    timezone: Europe/London
+compliance:
+  postal_address: ''
+  opt_out_line: Not interested? Reply "no thanks" and I won't email again.
+  do_not_contact: []
+  precleared:
+    enabled: false
+    sender_country: ''
+    address_source: unknown
+    prospect_country: ''
+brain:
+  provider: codex
+  model: gpt-5.5
+  reasoning_effort: ''
