@@ -18,8 +18,15 @@ STATUS
    the sites). It belonged to the Hostinger OpenClaw template. Needs Olivier's OK to stop:
    docker stop traefik-traefik-1 && docker update --restart=no traefik-traefik-1
    DO NOT touch Caddy.
-❌ Harvey not installed: the web console needs the root login, and Hostinger's agent
-   refuses git/pip/apt.
+✅ Harvey INSTALLED on the VPS (2026-11-02): /opt/harvey = upstream ethanplusai/harvey
+   @6b6a23a + Gershon harvey.local.yaml + skills/product_knowledge.md, venv, Codex CLI
+   0.159.3, systemd service `harvey` (user harvey, `harvey dashboard` on 127.0.0.1:5555,
+   CPUQuota 50%, MemoryMax 1G) enabled + active. Route that works: hPanel > VPS > Web
+   console opens a root shell directly (no password). Install log: /root/harvey-install.log
+❌ Codex login missing (status --check: Brain NOT READY). Run as the harvey user:
+   sudo -u harvey -H codex login --device-auth  -> approve the code in Olivier's ChatGPT.
+❌ Note: container `linalysis` restart-loops (reinstalls on each start) and is the likely
+   cause of the VPS "CPU limitation activated" warning.
 ❌ No sending mailbox, postal address, or email-verification key yet (Olivier to decide).
 
 INSTALL (as root on the VPS, ~10 min)
