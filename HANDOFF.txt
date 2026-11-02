@@ -1,0 +1,60 @@
+HARVEY — HANDOFF (2026-11-02)
+=============================
+
+Goal: run Harvey (cold-email sales agent) 24/7 on Olivier's Hostinger VPS
+srv1511567.hstgr.cloud (187.124.235.148, Ubuntu 24.04, 1 vCPU / 4 GB), using his
+ChatGPT plan (Codex) so no Claude credits are spent. Every email waits for approval.
+
+STATUS
+------
+✅ Repo gershonconsulting/harvey (private): upstream Harvey + Gershon config
+   - harvey.local.yaml   Gershon persona, offer, ICP (UK/DE/NL tech, 1-19 staff, >$1M),
+                         US-sales hiring signals, brain.provider=codex, require_approval=true
+   - skills/product_knowledge.md   Gershon positioning
+✅ Naomie stopped on the VPS (openclaw-zg7g-openclaw-1, naomie-browser) — NOT deleted.
+   Their restart policy could NOT be changed (Hostinger agent policy) -> they may come
+   back after a reboot. Fix: docker update --restart=no openclaw-zg7g-openclaw-1 naomie-browser
+❌ traefik-traefik-1 is crash-looping (port 80 is owned by host-level Caddy, which serves
+   the sites). It belonged to the Hostinger OpenClaw template. Needs Olivier's OK to stop:
+   docker stop traefik-traefik-1 && docker update --restart=no traefik-traefik-1
+   DO NOT touch Caddy.
+❌ Harvey not installed: the web console needs the root login, and Hostinger's agent
+   refuses git/pip/apt.
+❌ No sending mailbox, postal address, or email-verification key yet (Olivier to decide).
+
+INSTALL (as root on the VPS, ~10 min)
+-------------------------------------
+apt-get install -y python3-venv
+git clone https://github.com/gershonconsulting/harvey /opt/harvey   # needs GitHub access
+cd /opt/harvey && python3 -m venv .venv && .venv/bin/pip install -e .
+npm install -g @openai/codex@0.159.3      # exact version Harvey accepts
+codex login --device-auth                 # Olivier approves in his ChatGPT account
+.venv/bin/harvey status --check           # must pass (Codex isolation + login)
+
+Run as a service (dashboard stays on 127.0.0.1:5555, never expose it):
+cat >/etc/systemd/system/harvey.service <<'EOF'
+[Unit]
+Description=Harvey sales agent
+After=network-online.target
+[Service]
+WorkingDirectory=/opt/harvey
+ExecStart=/opt/harvey/.venv/bin/harvey run
+Restart=always
+Nice=10
+CPUQuota=50%
+MemoryMax=1G
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload && systemctl enable --now harvey
+Dashboard: ssh -L 5555:127.0.0.1:5555 root@187.124.235.148 then open the link from
+/opt/harvey/data/dashboard-token (harvey dashboard --url).
+
+BEFORE ANY EMAIL GOES OUT (Olivier's decisions)
+-----------------------------------------------
+- Sending mailbox on a SEPARATE domain (not gershonconsulting.com), SPF/DKIM/DMARC,
+  2-4 weeks warmup. Then GMAIL_CLIENT_ID/SECRET in .env + harvey gmail auth.
+- compliance.postal_address in harvey.local.yaml (CAN-SPAM).
+- REOON_API_KEY (free) or ZEROBOUNCE_API_KEY in .env, else no address is ever sent to.
+- Discovery: TINYFISH_API_KEY (free) or SERPER_API_KEY (2,500 free) in .env;
+  then: harvey discover --preset hiring --provider serper
