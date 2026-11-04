@@ -74,6 +74,10 @@ BEFORE ANY EMAIL GOES OUT (Olivier's decisions)
 - ✅ compliance.postal_address set in repo harvey.local.yaml (2026-11-04):
   Gershon Consulting LLC, 322 W 52nd Street, Suite 158, New York, NY 10019
   ❌ not yet copied to /opt/harvey/harvey.local.yaml on the VPS (browser with hPanel login was offline)
-- REOON_API_KEY (free) or ZEROBOUNCE_API_KEY in .env, else no address is ever sent to.
+- ✅ Email verification (2026-11-04): Gershon add-on verify_millionverifier (MILLIONVERIFIER_API_KEY,
+  ~10,400 credits, checked first) + ZEROBOUNCE_API_KEY (5 credits, backup). Keys go in /opt/harvey/.env
+  (given by Olivier in chat). ❌ not yet on the VPS.
+- Sending mailbox chosen: olivier@gershonconsulting.net (Google Workspace, separate domain);
+  persona.email set. ❌ Gmail OAuth (GMAIL_CLIENT_ID/SECRET + harvey gmail auth) or SMTP app password.
 - Discovery: TINYFISH_API_KEY (free) or SERPER_API_KEY (2,500 free) in .env;
   then: harvey discover --preset hiring --provider serper

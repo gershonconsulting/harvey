@@ -558,6 +558,38 @@ async def verify_zerobounce(email: str, api_key: str) -> Optional[dict]:
     return {"status": status, "catch_all": sub == "catch-all" or status == "catch-all"}
 
 
+async def verify_millionverifier(email: str, api_key: str) -> Optional[dict]:
+    """MillionVerifier single check (Gershon add-on).
+
+    result: ok / catch_all / unknown / disposable / invalid (error -> None).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            resp = await client.get(
+                "https://api.millionverifier.com/api/v3/",
+                params={"api": api_key, "email": email, "timeout": 20},
+            )
+    except httpx.HTTPError as e:
+        logger.debug(f"MillionVerifier request failed for {email}: {e}")
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        data = resp.json()
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or data.get("error"):
+        return None
+    result = str(data.get("result") or "").lower()
+    if result == "ok":
+        return {"status": "valid", "catch_all": False}
+    if result == "catch_all":
+        return {"status": "catch_all", "catch_all": True}
+    if result in ("invalid", "disposable"):
+        return {"status": result, "catch_all": False}
+    return {"status": "unknown", "catch_all": False}
+
+
 async def verify_hunter(email: str, api_key: str) -> Optional[dict]:
     try:
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
@@ -648,6 +680,7 @@ async def _verify_candidate(email: str, mx_type: str, env) -> tuple[Optional[str
     """
     reoon_key = getattr(env, "reoon_api_key", "") if env else ""
     zerobounce_key = getattr(env, "zerobounce_api_key", "") if env else ""
+    mv_key = getattr(env, "millionverifier_api_key", "") if env else ""
     hunter_key = _hunter_api_key()
 
     catch_all_seen = False
@@ -656,6 +689,8 @@ async def _verify_candidate(email: str, mx_type: str, env) -> tuple[Optional[str
     # then Reoon, then Hunter. SMTP is useless/misleading here.
     if mx_type in ("google", "microsoft", "gateway"):
         channels = []
+        if mv_key:
+            channels.append(lambda: verify_millionverifier(email, mv_key))
         if zerobounce_key:
             channels.append(lambda: verify_zerobounce(email, zerobounce_key))
         if reoon_key:
@@ -673,7 +708,16 @@ async def _verify_candidate(email: str, mx_type: str, env) -> tuple[Optional[str
                 return status, catch_all_seen
         return None, catch_all_seen
 
-    # Small / self-hosted: Reoon → SMTP (still works here) → Hunter.
+    # Small / self-hosted: MillionVerifier/Reoon → SMTP (still works here) → Hunter.
+    if mv_key:
+        verdict = await verify_millionverifier(email, mv_key)
+        if verdict:
+            if verdict.get("catch_all"):
+                catch_all_seen = True
+            status = _status_from_verdict(verdict)
+            if status is not None:
+                return status, catch_all_seen
+
     if reoon_key:
         verdict = await verify_reoon(email, reoon_key)
         if verdict:
