@@ -29,8 +29,12 @@ STATUS
    REPORT_FROM). systemd timers: harvey-daily.timer 08:00 Sint Maarten (12:00 UTC),
    harvey-alerts.timer every 15 min (sends only on change: service down, brain not ready,
    emails awaiting approval, new replies, send errors). Test email delivered.
-❌ Codex login missing (status --check: Brain NOT READY). Run as the harvey user:
-   sudo -u harvey -H codex login --device-auth  -> approve the code in Olivier's ChatGPT.
+✅ Codex login done 2026-11-04 (ChatGPT workspace "Gershon Consulting"; admin setting
+   "Enable device code sign-in for Codex" turned ON). Must use file storage:
+   sudo -u harvey -H codex -c cli_auth_credentials_store=file login --device-auth
+   brain.model = gpt-6.1-sol (gpt-5.5 is not in this workspace's catalog).
+   status --check: Brain ready. Login needs renewal ~every 8 days (Harvey never renews it);
+   the 15-min alert emails "brain NOT READY" when that happens -> redo the login above.
 ❌ Note: container `linalysis` restart-loops (reinstalls on each start) and is the likely
    cause of the VPS "CPU limitation activated" warning.
 ❌ No sending mailbox, postal address, or email-verification key yet (Olivier to decide).

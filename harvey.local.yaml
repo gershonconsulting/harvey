@@ -109,5 +109,5 @@ compliance:
     prospect_country: ''
 brain:
   provider: codex
-  model: gpt-5.5
+  model: gpt-6.1-sol
   reasoning_effort: ''
