@@ -99,7 +99,7 @@ usage:
     end: 07:00
     timezone: Europe/London
 compliance:
-  postal_address: ''
+  postal_address: Gershon Consulting LLC, 322 W 52nd Street, Suite 158, New York, NY 10019
   opt_out_line: Not interested? Reply "no thanks" and I won't email again.
   do_not_contact: []
   precleared:
