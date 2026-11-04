@@ -23,6 +23,12 @@ STATUS
    0.159.3, systemd service `harvey` (user harvey, `harvey dashboard` on 127.0.0.1:5555,
    CPUQuota 50%, MemoryMax 1G) enabled + active. Route that works: hPanel > VPS > Web
    console opens a root shell directly (no password). Install log: /root/harvey-install.log
+✅ Reports/alerts by email (2026-11-04): scripts/gershon_reports.py via Resend
+   (send-only key "harvey-vps-reports", domain gershon.ai) from "GC Harvey <harvey@gershon.ai>"
+   to harvey@gershonconsulting.com. Config in /opt/harvey/.env (RESEND_API_KEY, REPORT_TO,
+   REPORT_FROM). systemd timers: harvey-daily.timer 08:00 Sint Maarten (12:00 UTC),
+   harvey-alerts.timer every 15 min (sends only on change: service down, brain not ready,
+   emails awaiting approval, new replies, send errors). Test email delivered.
 ❌ Codex login missing (status --check: Brain NOT READY). Run as the harvey user:
    sudo -u harvey -H codex login --device-auth  -> approve the code in Olivier's ChatGPT.
 ❌ Note: container `linalysis` restart-loops (reinstalls on each start) and is the likely
