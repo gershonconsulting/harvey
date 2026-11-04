@@ -6,6 +6,9 @@
                                 needs to know (service down, brain not ready,
                                 emails waiting for approval, new replies,
                                 send errors). State kept in data/gershon_alerts.json.
+                                Also sends ONE email per new lead (a prospect whose
+                                reply Harvey classified as interested), subject
+                                "GC Campaign H01 — New lead: <name>, <company>".
 
 Config (in /opt/harvey/.env):
   RESEND_API_KEY=...            send-only key, gershon.ai domain
@@ -104,6 +107,63 @@ def send(env, subject, text):
     return True
 
 
+LEAD_CAMPAIGN = "GC Campaign H01"
+
+
+def new_leads(seen):
+    """Conversations Harvey classified as interested (or further along) not yet notified."""
+    rows = q("""SELECT c.id, c.intent, c.stage, c.thread_json, c.updated_at,
+                       p.first_name, p.last_name, p.title, p.email, p.linkedin_url,
+                       COALESCE(NULLIF(p.company, ''), co.name, ''), COALESCE(co.website, '')
+                FROM conversations c
+                LEFT JOIN prospects p ON p.id = c.prospect_id
+                LEFT JOIN companies co ON co.id = p.company_id
+                WHERE c.intent = 'interested'
+                   OR c.stage IN ('presenting', 'negotiating', 'ready_to_meet', 'meeting_booked')
+                ORDER BY c.updated_at""")
+    return [r for r in rows if r[0] not in seen]
+
+
+def last_inbound(thread_json):
+    try:
+        thread = json.loads(thread_json or "[]")
+    except ValueError:
+        return ""
+    for m in reversed(thread):
+        if isinstance(m, dict) and (m.get("sender") or m.get("role")) == "prospect":
+            return str(m.get("content") or m.get("body") or m.get("text") or "")[:3000]
+    if thread and isinstance(thread[-1], dict):
+        return str(thread[-1].get("content") or thread[-1].get("body") or "")[:3000]
+    return ""
+
+
+def send_lead(env, r):
+    cid, intent, stage, thread, updated, first, last, title, email, li, company, site = r
+    name = f"{first} {last}".strip() or email or "Unknown"
+    subject = f"{LEAD_CAMPAIGN} — New lead: {name}" + (f", {company}" if company else "")
+    body = "\n".join([
+        f"New lead from Harvey ({LEAD_CAMPAIGN})",
+        "",
+        f"Name: {name}",
+        f"Title: {title or '-'}",
+        f"Company: {company or '-'} {site}".rstrip(),
+        f"Email: {email or '-'}",
+        f"LinkedIn: {li or '-'}",
+        f"Intent: {intent or '-'} | Stage: {stage or '-'} | {updated} UTC",
+        "",
+        "Their latest message:",
+        last_inbound(thread) or "(not available)",
+        "",
+        "Booking link: https://www.gershonconsulting.com/calendar",
+        f"Conversation id: {cid} — Harvey dashboard on srv1511567 (/opt/harvey)",
+    ])
+    lead_env = dict(env)
+    lead_env["REPORT_FROM"] = env.get("LEAD_FROM", f"{LEAD_CAMPAIGN} <harvey@gershon.ai>")
+    if env.get("LEAD_TO"):
+        lead_env["REPORT_TO"] = env["LEAD_TO"]
+    return send(lead_env, subject, body)
+
+
 def fmt(s):
     lines = [
         f"Service: {s['service']}",
@@ -132,10 +192,22 @@ def main():
         flag = "❌" if (s["service"] != "active" or not s["brain_ready"] or s["pending_review"]) else "✅"
         send(env, f"{flag} GC Harvey daily report {today}", fmt(s))
         return
+    if mode == "test-lead":
+        send_lead(env, ("test", "interested", "presenting", json.dumps([{"sender": "prospect",
+                  "content": "Sounds interesting — can we talk next week?"}]), "now",
+                  "Test", "Lead", "CEO", "test@example.com", "", "Example Ltd", ""))
+        return
     if mode == "test":
         send(env, "✅ GC Harvey reports are connected", "Harvey can email you.\n\n" + fmt(s))
         return
     prev = json.loads(STATE.read_text()) if STATE.exists() else {}
+    seen = set(prev.get("leads_notified", []))
+    for r in new_leads(seen):
+        try:
+            if send_lead(env, r):
+                seen.add(r[0])
+        except Exception as e:  # noqa: BLE001
+            print(f"lead email failed for {r[0]}: {e}", file=sys.stderr)
     alerts = []
     if s["service"] != "active" and prev.get("service") == "active":
         alerts.append(f"Harvey service is {s['service']} (was active).")
@@ -148,8 +220,9 @@ def main():
     new_err = [e for e in s["errors"] if e not in prev.get("errors", [])]
     if new_err and prev:
         alerts.append(f"{len(new_err)} new send error(s): " + "; ".join(e[2] for e in new_err))
-    STATE.write_text(json.dumps({k: s[k] for k in
-                                 ("service", "brain_ready", "pending_review", "replies_total", "errors")}))
+    state = {k: s[k] for k in ("service", "brain_ready", "pending_review", "replies_total", "errors")}
+    state["leads_notified"] = sorted(seen)
+    STATE.write_text(json.dumps(state))
     if alerts and prev:
         send(env, "❌ GC Harvey: " + alerts[0][:80], "\n".join(alerts) + "\n\n" + fmt(s))
 
