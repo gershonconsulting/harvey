@@ -17,6 +17,7 @@ import re
 import time
 from datetime import date, datetime, timedelta, timezone
 
+from harvey.company_names import clean_company_name
 from harvey.brain import Brain
 from harvey.config import (
     HarveyConfig, EnvConfig, cold_daily_cap, compliance_footer_lines, compliance_notice,
@@ -27,7 +28,7 @@ from harvey.send_window import in_window, next_send_time, recipient_country, rec
 from harvey.integrations.instantly import InstantlyClient
 from harvey.integrations.mail_provider import NATIVE_PROVIDERS, get_mail_provider
 from harvey.integrations.precleared import PreclearedClient, clear_hold, record_hold
-from harvey.integrations.signature import signature_problem
+from harvey.integrations.signature import signature_problem, with_signature
 from harvey.sending_mode import SIGNATURE_HOLD_PREFIX, sync_sending_mode
 from harvey.state import (
     AUTOPILOT_OFF_REASON, COLLEAGUE_REPLIED, HAND_SENT_REASON, HELD_FOR_REVIEW,
@@ -385,7 +386,7 @@ class Sender:
         sequences = [
             {
                 "subject": step.subject.strip(),
-                "body": self._with_footer(step.body.strip()),
+                "body": self._with_footer(with_signature(step.body.strip(), self.config)),
                 "wait": step.delay_days,
             }
             for step in campaign.sequence
@@ -580,12 +581,12 @@ class Sender:
             # A company inbox has no name; "there" keeps "Hi {{first_name}}," readable.
             "first_name": prospect.first_name or ("there" if prospect.is_company_inbox else ""),
             "last_name": prospect.last_name,
-            "company": prospect.company,
+            "company": clean_company_name(prospect.company),
             "title": prospect.title,
             "personalization": prospect.personalization_notes,
         }
         # "{{company}}'s" for "Parkes Builders" should read "Builders'".
-        company = prospect.company or ""
+        company = clean_company_name(prospect.company or "")
         if company.endswith(("s", "S")):
             for tag in ("{{company}}", "{{ company }}"):
                 text = text.replace(tag + "'s", company + "'")
@@ -696,11 +697,17 @@ class Sender:
             return body
         return body.rstrip() + "\n\n" + footer
 
-    def _outgoing_body(self, item: dict) -> str:
-        """The exact body that goes out: cold email gets the footer, replies don't."""
+    def _outgoing_body(self, item: dict, signed: bool = True) -> str:
+        """The exact body that goes out: every email gets the sign-off block
+        (channels.email.signature.text), cold email also the footer.
+
+        ``signed=False`` is the body the content checks read: the sign-off is
+        the operator's own text, so its links and length don't count against
+        the one-link and length limits meant for what Harvey wrote."""
+        body = with_signature(item["body"], self.config) if signed else item["body"]
         if item["kind"] == "sequence":
-            return self._with_footer(item["body"])
-        return item["body"]
+            return self._with_footer(body)
+        return body
 
     async def _follow_up_order(self, item: dict, prospect=None) -> str | tuple[str, str] | None:
         """For a follow-up: "wait" until the email before it went out and its
@@ -776,7 +783,7 @@ class Sender:
             if colleague:
                 return "cancelled", f"{COLLEAGUE_REPLIED} ({colleague})"
         gate = pre_send_check(
-            item["to_email"], item["subject"], self._outgoing_body(item),
+            item["to_email"], item["subject"], self._outgoing_body(item, signed=False),
             prospect=prospect, allow_risky=allow_risky, kind=item["kind"],
             postal_address=compliance_of(self.config).postal_address,
             do_not_contact=live_do_not_contact(self.config),
@@ -794,7 +801,7 @@ class Sender:
         if item.get("approved_by") != "you":
             # Nobody approved this one (autopilot): what a planted
             # instruction would add sends it back to you instead.
-            held = autopilot_review(item["subject"], self._outgoing_body(item), self.config,
+            held = autopilot_review(item["subject"], self._outgoing_body(item, signed=False), self.config,
                                     recipient=item["to_email"])
             if held:
                 logger.warning(f"Sender: holding email to {item['to_email']} for review: {held}")

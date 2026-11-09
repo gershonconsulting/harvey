@@ -100,6 +100,20 @@ def load_signature(config) -> Signature | None:
     )
 
 
+def signature_text(config) -> str:
+    """The sign-off block (channels.email.signature.text), or ""."""
+    return (getattr(_settings(config), "text", "") or "").strip("\n")
+
+
+def with_signature(body: str, config) -> str:
+    """``body`` with the sign-off block under it. Not added twice."""
+    text = signature_text(config)
+    body = (body or "").rstrip()
+    if not text or body.endswith(text.rstrip()):
+        return body
+    return body + "\n\n" + text
+
+
 def signature_problem(config) -> str:
     """Why the configured signature can't be used, or "" when it can (or
     when there's none)."""

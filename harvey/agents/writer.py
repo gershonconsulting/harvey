@@ -15,6 +15,7 @@ import re
 from datetime import datetime, timezone
 
 from harvey.brain import Brain
+from harvey.company_names import clean_company_name, unfit_lead_reason
 from harvey.config import EmailRulesError, HarveyConfig, compliance_of, load_email_rules
 from harvey.humanize import humanize, humanizer_enabled
 from harvey.integrations.mail_provider import NATIVE_PROVIDERS
@@ -30,6 +31,8 @@ logger = logging.getLogger("harvey.writer")
 # prospect before Harvey stops trying (status 'write_failed'). A provider
 # outage never counts; only a reply that came back unusable does.
 MAX_WRITE_ATTEMPTS = 3
+# Leads the Writer sets aside without writing (see company_names.unfit_lead_reason).
+UNFIT_STATUS = "unfit"
 WRITE_ATTEMPTS_KEY = "write_attempts:"
 
 # Merge variables that name a person; a company inbox has none of them.
@@ -148,6 +151,20 @@ class Writer:
             p for p in new_prospects
             if p.email and (p.email_status or "guess") in WRITABLE_EMAIL_STATUSES
         ]
+        # A bot-check page saved as the company name, or a support@ inbox:
+        # no email a founder would read. Set aside so they aren't picked again.
+        fit = []
+        for p in prospects_with_email:
+            reason = unfit_lead_reason(p)
+            if reason:
+                logger.info(f"Writer: skipping {p.email}: {reason}.")
+                await self.state.update_prospect_status(p.id, UNFIT_STATUS)
+                await self.state.log_action(
+                    action_type="lead_unfit", agent="writer",
+                    details={"email": p.email, "reason": reason})
+            else:
+                fit.append(p)
+        prospects_with_email = fit
         # Someone at their company already replied: no cold email to write.
         prospects_with_email = [
             p for p in prospects_with_email
@@ -346,7 +363,7 @@ class Writer:
         if prospect.is_company_inbox:
             facts = [
                 f"- Name: unknown (the company's general inbox, {prospect.email})",
-                f"- Company: {prospect.company}",
+                f"- Company: {clean_company_name(prospect.company)}",
             ]
             inbox_rule = (
                 "\n- This goes to the company's general inbox, most likely read by the owner"
@@ -356,7 +373,7 @@ class Writer:
             facts = [
                 f"- Name: {prospect.full_name()}",
                 f"- Title: {prospect.title}",
-                f"- Company: {prospect.company}",
+                f"- Company: {clean_company_name(prospect.company)}",
             ]
         if prospect.industry:
             facts.append(f"- Industry: {prospect.industry}")
@@ -400,6 +417,10 @@ class Writer:
         prompt += await self._feedback_block([prospect.id])
         rules = getattr(self, "email_rules", "")
         prompt += operator_rules_block(rules)
+        if rules and inbox_rule:
+            inbox_rule = (
+                "\n- This goes to the company's general inbox: use no first name, and greet"
+                "\n  the way the OPERATOR'S EMAIL RULES say for a company inbox.")
         if rules:
             shape = (
                 "- Follow the OPERATOR'S EMAIL RULES above for this first email: its length,\n"
@@ -445,7 +466,7 @@ Return ONLY JSON: {{"subject": "...", "body": "..."}}"""
         """Ask the brain to write a 3-email sequence."""
         # Build context about the prospects
         prospect_summary = "\n".join(
-            f"- {p.full_name()}, {p.title} at {p.company}"
+            f"- {p.full_name()}, {p.title} at {clean_company_name(p.company)}"
             + (f" | Notes: {p.personalization_notes}" if p.personalization_notes else "")
             for p in prospects[:5]  # Show sample for context
         )
