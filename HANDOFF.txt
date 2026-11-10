@@ -74,6 +74,12 @@ Dashboard: ssh -L 5555:127.0.0.1:5555 root@187.124.235.148 then open the link fr
 
 BEFORE ANY EMAIL GOES OUT (Olivier's decisions)
 -----------------------------------------------
+- ❌ 2026-11-09 email quality (branch gershon/email-quality): Olivier rejected Harvey's drafts
+  (subject, email, signature). Now: writer.email_rules = skills/gershon_email_rules.md (his CC01
+  format), channels.email.signature.text = his CC01 sign-off added at send time, company names
+  cleaned (no 'London, UK', Ltd), bot-check names and support@/noreply@ leads set to status 'unfit'.
+  Deploy needs his OK: copy the repo files + harvey.local.yaml to /opt/harvey, restart harvey.
+  Old pending drafts were written to the old rules: reject them and let Harvey rewrite.
 - Sending mailbox on a SEPARATE domain (not gershonconsulting.com), SPF/DKIM/DMARC,
   2-4 weeks warmup. Then GMAIL_CLIENT_ID/SECRET in .env + harvey gmail auth.
 - ✅ compliance.postal_address set in repo harvey.local.yaml (2026-11-04):

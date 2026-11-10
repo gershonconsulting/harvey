@@ -36,6 +36,7 @@ from urllib.parse import parse_qs, quote_plus, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
+from harvey.company_names import is_placeholder_name
 from harvey.brain import Brain
 from harvey.collectors import people as people_mod
 from harvey.collectors.discover import site_name_from_html
@@ -1387,7 +1388,8 @@ Respond ONLY with the JSON array."""
                 title_text = title_tag.get_text().strip()
                 # Split on common separators to isolate the brand name.
                 name = re.split(r"[|—–\-:]", title_text)[0].strip()
-                if name:
+                # A bot check or error page names no business.
+                if name and not is_placeholder_name(name):
                     info["name"] = name[:120]
 
             meta_desc = soup.find("meta", attrs={"name": "description"})
@@ -1397,7 +1399,7 @@ Respond ONLY with the JSON array."""
             og_name = soup.find("meta", attrs={"property": "og:site_name"})
             if og_name and og_name.get("content"):
                 og = self._attr_str(og_name.get("content")).strip()
-                if og:
+                if og and not is_placeholder_name(og):
                     info["name"] = og[:120]
 
             if not info["description"]:

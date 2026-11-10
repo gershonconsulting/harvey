@@ -216,11 +216,23 @@ class SignatureConfig(BaseModel):
     alt: str = ""             # shown when images are off; empty → persona.company
     link: str = ""            # optional https:// address the logo opens
     direction: str = "auto"   # "rtl" for Hebrew or Arabic email, "ltr", or "auto"
+    # Your sign-off and contact block, as plain text: added under every email
+    # Harvey sends (cold and replies), above the postal address and opt-out
+    # line. Works with or without a logo, and with every native provider.
+    text: str = ""
 
     @field_validator("logo", "alt", "link", mode="before")
     @classmethod
     def _blank_is_empty(cls, v):
         return "" if v is None else str(v).strip()
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def _signature_text(cls, v):
+        if v is None:
+            return ""
+        lines = [line.rstrip() for line in str(v).replace("\r\n", "\n").split("\n")]
+        return "\n".join(lines).strip("\n")
 
     @field_validator("width")
     @classmethod
