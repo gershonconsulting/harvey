@@ -9,6 +9,11 @@
                                 Also sends ONE email per new lead (a prospect whose
                                 reply Harvey classified as interested), subject
                                 "GC Campaign H01 — New lead: <name>, <company>".
+                                Also sends ONE email listing every draft that newly
+                                entered pending_review, in full (to, name, company,
+                                subject, body), so they can be read in the inbox.
+  gershon_reports.py drafts  -> emails ALL drafts currently in pending_review, in full
+                                (always sends when there is at least one).
 
 Config (in /opt/harvey/.env):
   RESEND_API_KEY=...            send-only key, gershon.ai domain
@@ -110,6 +115,54 @@ def send(env, subject, text):
 LEAD_CAMPAIGN = "GC Campaign H01"
 
 
+def pending_drafts():
+    """Every outbox email waiting for approval, oldest first, with who it is for."""
+    return q("""SELECT o.id, o.to_email, o.subject, o.body, o.step, o.kind, o.created_at,
+                       COALESCE(p.first_name, ''), COALESCE(p.last_name, ''),
+                       COALESCE(p.title, ''),
+                       COALESCE(NULLIF(p.company, ''), co.name, ''),
+                       COALESCE(co.website, '')
+                FROM outbox o
+                LEFT JOIN prospects p ON p.id = o.prospect_id
+                LEFT JOIN companies co ON co.id = p.company_id
+                WHERE o.status = 'pending_review'
+                ORDER BY o.created_at, o.id""")
+
+
+def fmt_drafts(drafts):
+    """Plain-text email body: one numbered block per draft, full text, nothing cut."""
+    out = [f"{len(drafts)} email draft(s) waiting for your approval in Harvey.",
+           "Nothing has been sent. Each draft goes out only after it is approved.", ""]
+    for i, d in enumerate(drafts, 1):
+        oid, to, subject, body, step, kind, created, first, last, title, company, site = d
+        name = f"{first} {last}".strip() or "-"
+        out += [
+            "=" * 60,
+            f"DRAFT {i} of {len(drafts)}",
+            f"To: {name} <{to or '-'}>",
+            f"Title: {title or '-'}",
+            f"Company: {company or '-'} {site}".rstrip(),
+            f"Subject: {subject or '-'}",
+            f"Step: {step} ({kind}) | created {created} UTC | id {oid}",
+            "-" * 60,
+            (body or "(empty body)").rstrip(),
+            "",
+        ]
+    out.append("Server: srv1511567.hstgr.cloud /opt/harvey")
+    return "\n".join(out)
+
+
+def send_drafts(env, drafts, label="new"):
+    if not drafts:
+        return False
+    names = ", ".join(sorted({d[10] for d in drafts if d[10]}))[:80]
+    subject = f"❌ GC Harvey: {len(drafts)} {label} draft(s) to approve" + (f" — {names}" if names else "")
+    draft_env = dict(env)
+    if env.get("DRAFTS_TO"):
+        draft_env["REPORT_TO"] = env["DRAFTS_TO"]
+    return send(draft_env, subject, fmt_drafts(drafts))
+
+
 def new_leads(seen):
     """Conversations Harvey classified as interested (or further along) not yet notified."""
     rows = q("""SELECT c.id, c.intent, c.stage, c.thread_json, c.updated_at,
@@ -197,6 +250,10 @@ def main():
                   "content": "Sounds interesting — can we talk next week?"}]), "now",
                   "Test", "Lead", "CEO", "test@example.com", "", "Example Ltd", ""))
         return
+    if mode == "drafts":
+        if not send_drafts(env, pending_drafts(), label="waiting"):
+            print("no drafts waiting")
+        return
     if mode == "test":
         send(env, "✅ GC Harvey reports are connected", "Harvey can email you.\n\n" + fmt(s))
         return
@@ -208,12 +265,21 @@ def main():
                 seen.add(r[0])
         except Exception as e:  # noqa: BLE001
             print(f"lead email failed for {r[0]}: {e}", file=sys.stderr)
+    drafts_seen = set(prev.get("drafts_notified", []))
+    fresh = [d for d in pending_drafts() if d[0] not in drafts_seen]
+    if fresh:
+        try:
+            if send_drafts(env, fresh):
+                drafts_seen.update(d[0] for d in fresh)
+        except Exception as e:  # noqa: BLE001
+            print(f"drafts email failed: {e}", file=sys.stderr)
+    still_pending = {d[0] for d in pending_drafts()}
     alerts = []
     if s["service"] != "active" and prev.get("service") == "active":
         alerts.append(f"Harvey service is {s['service']} (was active).")
     if not s["brain_ready"] and prev.get("brain_ready", True):
         alerts.append("Harvey's brain (ChatGPT/Codex login) is NOT READY — Harvey is paused.")
-    if s["pending_review"] > prev.get("pending_review", 0):
+    if s["pending_review"] > prev.get("pending_review", 0) and not fresh:
         alerts.append(f"{s['pending_review']} email(s) are waiting for your approval.")
     if s["replies_total"] > prev.get("replies_total", 0):
         alerts.append(f"{s['replies_total'] - prev.get('replies_total', 0)} new prospect reply(ies).")
@@ -222,6 +288,8 @@ def main():
         alerts.append(f"{len(new_err)} new send error(s): " + "; ".join(e[2] for e in new_err))
     state = {k: s[k] for k in ("service", "brain_ready", "pending_review", "replies_total", "errors")}
     state["leads_notified"] = sorted(seen)
+    # keep only ids still pending, so the state file does not grow forever
+    state["drafts_notified"] = sorted(drafts_seen & still_pending)
     STATE.write_text(json.dumps(state))
     if alerts and prev:
         send(env, "❌ GC Harvey: " + alerts[0][:80], "\n".join(alerts) + "\n\n" + fmt(s))

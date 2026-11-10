@@ -35,6 +35,11 @@ STATUS
    brain.model = gpt-6.1-sol (gpt-5.5 is not in this workspace's catalog).
    status --check: Brain ready. Login needs renewal ~every 8 days (Harvey never renews it);
    the 15-min alert emails "brain NOT READY" when that happens -> redo the login above.
+❌ Full drafts by email (2026-11-09, branch gershon/email-pending-drafts): the 15-min
+   alerts run now emails every draft that enters pending_review, in full (to, name,
+   company, subject, body), once per draft, to REPORT_TO (or DRAFTS_TO if set).
+   `scripts/gershon_reports.py drafts` emails all drafts currently waiting.
+   Needs deploying to /opt/harvey (same as edc2cdb new-lead email).
 ❌ Note: container `linalysis` restart-loops (reinstalls on each start) and is the likely
    cause of the VPS "CPU limitation activated" warning.
 ❌ No sending mailbox, postal address, or email-verification key yet (Olivier to decide).
