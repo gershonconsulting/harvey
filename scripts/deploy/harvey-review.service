@@ -1,0 +1,18 @@
+# Gershon add-on: the private review page (`harvey review-page`).
+# Loopback only; Caddy puts HTTPS and the public name in front of it.
+[Unit]
+Description=Harvey review page (approve waiting emails)
+After=network-online.target
+
+[Service]
+User=harvey
+WorkingDirectory=/opt/harvey
+EnvironmentFile=/opt/harvey/.env
+ExecStart=/opt/harvey/.venv/bin/harvey review-page --host 127.0.0.1 --port 5556
+Restart=always
+CPUQuota=20%
+MemoryMax=256M
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

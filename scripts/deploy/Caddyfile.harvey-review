@@ -1,0 +1,14 @@
+# Add to the host Caddyfile (Caddy already serves the VPS sites on 80/443).
+# Only the review page is published; the dashboard (5555) stays private.
+harvey.gershon.ai {
+	@review path /review /review/*
+	handle @review {
+		reverse_proxy 127.0.0.1:5556
+	}
+	handle {
+		redir /review
+	}
+	log {
+		output discard
+	}
+}

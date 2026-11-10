@@ -1177,6 +1177,12 @@ async def outbox_edit(item_id: str, request: Request):
         body = await request.json()
     except Exception:
         body = {}
+    return await edit_pending_draft(item_id, body, actor="dashboard")
+
+
+async def edit_pending_draft(item_id: str, body, actor: str = "dashboard"):
+    """The edit itself, shared by the dashboard and the review page
+    (harvey/review_app.py). Never approves the draft."""
     if not isinstance(body, dict):
         body = {}
     subject = str(body.get("subject") or "").strip()
@@ -1217,7 +1223,7 @@ async def outbox_edit(item_id: str, request: Request):
             return JSONResponse({"success": False,
                                  "message": "Only drafts awaiting review can be edited."},
                                 status_code=409)
-        await state.log_action("outbox_edited", "dashboard", {
+        await state.log_action("outbox_edited", actor, {
             "outbox_id": item_id, "to_email": item.get("to_email", ""),
             "old_subject": item.get("subject", ""), "old_body": item.get("body", ""),
         })
