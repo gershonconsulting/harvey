@@ -116,6 +116,6 @@ def test_gershon_config_has_signature_and_rules():
     if not path.exists():
         pytest.skip("no Gershon config here")
     config = load_config(str(path))
-    assert config.channels.email.signature.text.startswith("Best regards,\n\nOlivier Attia")
+    assert config.channels.email.signature.text.startswith("Speak with you soon,\n\nOlivier Attia")
     assert config.writer.email_rules == "skills/gershon_email_rules.md"
     assert (PROJECT_ROOT / config.writer.email_rules).exists()

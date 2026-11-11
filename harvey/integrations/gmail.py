@@ -32,7 +32,7 @@ from harvey.integrations.mail_provider import (
     SendResult,
     looks_like_bounce,
 )
-from harvey.integrations.signature import SignatureError, load_signature, set_body
+from harvey.integrations.signature import SignatureError, bcc_addresses, load_signature, set_body
 
 logger = logging.getLogger("harvey.gmail")
 
@@ -224,6 +224,9 @@ class GmailProvider(MailProvider):
         msg["To"] = to_email
         msg["From"] = f"{persona.name} <{persona.email}>" if persona.email else persona.name
         msg["Subject"] = subject
+        bcc = bcc_addresses(self.config)
+        if bcc:
+            msg["Bcc"] = ", ".join(bcc)
         if in_reply_to:
             msg["In-Reply-To"] = in_reply_to
             msg["References"] = in_reply_to

@@ -37,17 +37,22 @@ class SignatureError(ValueError):
     pass
 
 
+MAX_HTML_BYTES = 100_000
+
+
 @dataclass(frozen=True)
 class Signature:
-    data: bytes
-    mime: str             # image/png, image/jpeg or image/gif
-    filename: str
-    content_id: str       # the src="cid:..." the HTML points at
-    width: int
-    height: int
-    alt: str
-    link: str
-    direction: str        # rtl, ltr or auto
+    data: bytes = b""     # the logo; empty when there's only an HTML signature
+    mime: str = ""        # image/png, image/jpeg or image/gif
+    filename: str = ""
+    content_id: str = ""  # the src="cid:..." the HTML points at
+    width: int = 0
+    height: int = 0
+    alt: str = ""
+    link: str = ""
+    direction: str = "auto"   # rtl, ltr or auto
+    html: str = ""        # your own HTML signature block (signature.html)
+    text: str = ""        # the plain-text sign-off it stands in for
 
 
 def _settings(config):
@@ -60,8 +65,12 @@ def load_signature(config) -> Signature | None:
     SignatureError when there is one but its logo can't be used."""
     settings = _settings(config)
     logo = (getattr(settings, "logo", "") or "").strip()
+    html_block = _load_html(getattr(settings, "html", "") or "")
+    direction = (getattr(settings, "direction", "") or "auto").strip().lower()
     if not logo:
-        return None
+        if not html_block:
+            return None
+        return Signature(direction=direction, html=html_block, text=signature_text(config))
     try:
         path = Path(logo).expanduser()
         if not path.is_absolute():
@@ -96,8 +105,40 @@ def load_signature(config) -> Signature | None:
         height=height,
         alt=(getattr(settings, "alt", "") or company or "logo").strip(),
         link=(getattr(settings, "link", "") or "").strip(),
-        direction=(getattr(settings, "direction", "") or "auto").strip().lower(),
+        direction=direction,
+        html=html_block,
+        text=signature_text(config),
     )
+
+
+def _load_html(name: str) -> str:
+    """The HTML signature file's content, or "" when none is set. Raises
+    SignatureError when it's set but can't be used, so nothing goes out
+    without it."""
+    name = name.strip()
+    if not name:
+        return ""
+    path = Path(name).expanduser()
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        raise SignatureError(f"HTML signature file not found: {path}") from None
+    except (OSError, RuntimeError, ValueError) as e:
+        raise SignatureError(f"HTML signature file can't be read: {name} ({e})") from None
+    if len(data) > MAX_HTML_BYTES:
+        raise SignatureError(f"HTML signature {path.name} is {len(data) // 1000} KB; keep it under "
+                             f"{MAX_HTML_BYTES // 1000} KB")
+    try:
+        block = data.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        raise SignatureError(f"HTML signature {path.name} isn't UTF-8 text") from None
+    if not block:
+        raise SignatureError(f"HTML signature {path.name} is empty")
+    if re.search(r"<\s*(script|iframe|object|embed|form)\b|\son\w+\s*=|javascript:", block, re.I):
+        raise SignatureError(f"HTML signature {path.name} contains scripts or forms; mail clients block those")
+    return block
 
 
 def signature_text(config) -> str:
@@ -114,6 +155,12 @@ def with_signature(body: str, config) -> str:
     return body + "\n\n" + text
 
 
+def bcc_addresses(config) -> list[str]:
+    """channels.email.bcc: who gets a blind copy of every email Harvey sends."""
+    email = getattr(getattr(config, "channels", None), "email", None)
+    return list(getattr(email, "bcc", None) or [])
+
+
 def signature_problem(config) -> str:
     """Why the configured signature can't be used, or "" when it can (or
     when there's none)."""
@@ -124,20 +171,33 @@ def signature_problem(config) -> str:
     return ""
 
 
-def render_html(body: str, sig: Signature) -> str:
-    """The email as HTML: Harvey's text, then the logo."""
+def _paragraphs(body: str) -> str:
     paragraphs = [p for p in re.split(r"\n[ \t]*\n", body.replace("\r\n", "\n").strip()) if p.strip()]
-    text = "\n".join(
-        f'<p style="margin:0 0 1em 0">{_paragraph(p)}</p>' for p in paragraphs
-    )
-    height = f' height="{sig.height}"'
-    img = (
-        f'<img src="cid:{sig.content_id}" width="{sig.width}"{height} '
-        f'alt="{html.escape(sig.alt)}" '
-        f'style="display:block;border:0;width:{sig.width}px;height:auto">'
-    )
-    if sig.link:
-        img = f'<a href="{html.escape(sig.link)}">{img}</a>'
+    return "\n".join(f'<p style="margin:0 0 1em 0">{_paragraph(p)}</p>' for p in paragraphs)
+
+
+def render_html(body: str, sig: Signature) -> str:
+    """The email as HTML: Harvey's text, then your HTML signature (in place
+    of the plain-text sign-off) and/or the logo, then anything after the
+    sign-off (postal address, opt-out line)."""
+    body = body.replace("\r\n", "\n")
+    tail = ""
+    if sig.html and sig.text and sig.text.strip() in body:
+        body, tail = body.split(sig.text.strip(), 1)
+    text = _paragraphs(body)
+    img = ""
+    if sig.data:
+        height = f' height="{sig.height}"'
+        img = (
+            f'<img src="cid:{sig.content_id}" width="{sig.width}"{height} '
+            f'alt="{html.escape(sig.alt)}" '
+            f'style="display:block;border:0;width:{sig.width}px;height:auto">'
+        )
+        if sig.link:
+            img = f'<a href="{html.escape(sig.link)}">{img}</a>'
+        img = f'<div style="margin-top:1.5em">{img}</div>\n'
+    block = f'<div style="margin-top:1em">{sig.html}</div>\n' if sig.html else ""
+    after = (_paragraphs(tail) + "\n") if tail.strip() else ""
     if sig.direction == "auto":
         direction = 'dir="auto"'
     else:
@@ -149,7 +209,7 @@ def render_html(body: str, sig: Signature) -> str:
         f'<div {direction}>\n'
         '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5">\n'
         f"{text}\n"
-        f'<div style="margin-top:1.5em">{img}</div>\n'
+        f"{block}{img}{after}"
         "</div>\n</div>\n</body></html>\n"
     )
 
@@ -161,6 +221,8 @@ def set_body(msg: EmailMessage, body: str, sig: Signature | None):
     if sig is None:
         return
     msg.add_alternative(render_html(body, sig), subtype="html")
+    if not sig.data:
+        return
     maintype, subtype = sig.mime.split("/")
     msg.get_payload()[-1].add_related(
         sig.data, maintype=maintype, subtype=subtype,

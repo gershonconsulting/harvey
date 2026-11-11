@@ -42,7 +42,7 @@ from harvey.integrations.mail_provider import (
     SendResult,
     looks_like_bounce,
 )
-from harvey.integrations.signature import SignatureError, load_signature, render_html
+from harvey.integrations.signature import SignatureError, bcc_addresses, load_signature, render_html
 
 logger = logging.getLogger("harvey.microsoft")
 
@@ -243,6 +243,9 @@ class MicrosoftProvider(MailProvider):
                      else {"contentType": "Text", "content": body}),
             "toRecipients": [{"emailAddress": {"address": to_email}}],
         }
+        bcc = bcc_addresses(self.config)
+        if bcc:
+            content["bccRecipients"] = [{"emailAddress": {"address": a}} for a in bcc]
         draft = None
         try:
             await self._check_identity()
@@ -260,7 +263,7 @@ class MicrosoftProvider(MailProvider):
                     draft = None
             if draft is None:
                 draft = await self._request("POST", "/me/messages", json=content)
-            if sig:
+            if sig and sig.data:
                 await self._request("POST", f"/me/messages/{draft['id']}/attachments", json={
                     "@odata.type": "#microsoft.graph.fileAttachment",
                     "name": sig.filename,
