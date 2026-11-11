@@ -110,3 +110,19 @@ def test_gershon_config_has_the_signature_and_bcc():
     assert c.channels.email.bcc == ["harvey@gershonconsulting.com"]
     sig = load_signature(c)
     assert sig is not None and "Featured in".upper() in sig.html.upper() and sig.text.startswith("Speak with you soon,")
+
+
+@pytest.mark.parametrize("draft", [
+    "Hi Jane,\n\nOne question?\n\nSam Sender",
+    "Hi Jane,\n\nOne question?\n\nBest regards,\n\nSam Sender",
+    "Hi Jane,\n\nOne question?\n\nBest regards,\nSam",
+    "Hi Jane,\n\nOne question?",
+])
+def test_old_drafts_are_not_signed_twice(tmp_path, draft):
+    out = with_signature(draft, cfg(tmp_path))
+    assert out == "Hi Jane,\n\nOne question?\n\n" + SIGN_OFF
+
+
+def test_a_name_inside_the_body_is_left_alone(tmp_path):
+    draft = "Hi Jane,\n\nSam Sender here, one question?"
+    assert with_signature(draft, cfg(tmp_path)).startswith(draft)
