@@ -29,7 +29,7 @@ from harvey.integrations.mail_provider import (
     SendResult,
     looks_like_bounce,
 )
-from harvey.integrations.signature import SignatureError, load_signature, set_body
+from harvey.integrations.signature import SignatureError, bcc_addresses, load_signature, set_body
 
 logger = logging.getLogger("harvey.smtp")
 
@@ -68,6 +68,9 @@ class SmtpImapProvider(MailProvider):
         msg["To"] = to_email
         msg["From"] = f"{persona.name} <{persona.email or self.smtp_user}>"
         msg["Subject"] = subject
+        bcc = bcc_addresses(self.config)
+        if bcc:
+            msg["Bcc"] = ", ".join(bcc)  # aiosmtplib delivers to it and strips the header
         message_id = make_msgid(domain=(persona.email or self.smtp_user).split("@")[-1])
         msg["Message-ID"] = message_id
         if in_reply_to:

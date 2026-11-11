@@ -80,10 +80,12 @@ channels:
       alt: ''
       link: ''
       direction: auto
-      # Olivier's sign-off, as in his own CC01 campaign emails. Added under
-      # every email at send time; Harvey never writes a sign-off itself.
+      # Olivier's real signature, copied from his CC02 emails (Nov 2026).
+      # html: what recipients see; text: the plain-text version of it.
+      # Added under every email at send time; Harvey never writes a sign-off itself.
+      html: gershon/signature.html
       text: |-
-        Best regards,
+        Speak with you soon,
 
         Olivier Attia
         Managing Director
@@ -93,6 +95,9 @@ channels:
         2 minutes to understand what we do: https://www.youtube.com/watch?v=RBxLxacezYI
 
         H01
+    # Every email Harvey sends is blind-copied here (Olivier, 2026-11-11).
+    bcc:
+      - harvey@gershonconsulting.com
     send_window:
       start: 08:00
       end: '17:00'
