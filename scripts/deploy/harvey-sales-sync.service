@@ -1,0 +1,10 @@
+[Unit]
+Description=Harvey -> sales.gershon.ai sync (GC Campaign H01)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=harvey
+WorkingDirectory=/opt/harvey
+ExecStart=/opt/harvey/.venv/bin/python /opt/harvey/scripts/gershon_sales_sync.py sync
+TimeoutStartSec=300

@@ -5,6 +5,18 @@ Goal: run Harvey (cold-email sales agent) 24/7 on Olivier's Hostinger VPS
 srv1511567.hstgr.cloud (187.124.235.148, Ubuntu 24.04, 1 vCPU / 4 GB), using his
 ChatGPT plan (Codex) so no Claude credits are spent. Every email waits for approval.
 
+SALES.GERSHON.AI LINK (2026-11-11) — Olivier: "I have no idea where Harvey's leads are"
+------------------------------------------------------------------------------------
+✅ scripts/gershon_sales_sync.py: every 15 min pushes companies, prospects, outbox and
+   conversations (+ service health) to https://sales.gershon.ai/api/harvey/ingest, then
+   applies the follow-up actions decided in the app (edit / approve one / reject / new
+   follow-up queued as pending_review) through Harvey's own StateManager, and confirms
+   them. Never sends; the Sender still gates every email. Tests: tests/test_gershon_sales_sync.py
+✅ Timer files: scripts/deploy/harvey-sales-sync.{service,timer}
+❌ VPS install: copy script + units to /opt/harvey and /etc/systemd/system, add
+   SALES_INGEST_TOKEN (random) to /opt/harvey/.env, put its SHA-256 in sales D1
+   (harvey_meta k='ingest_sha256'), systemctl enable --now harvey-sales-sync.timer
+
 STATUS
 ------
 ✅ Repo gershonconsulting/harvey (private): upstream Harvey + Gershon config
