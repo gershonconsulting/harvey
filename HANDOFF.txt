@@ -40,6 +40,19 @@ STATUS
    company, subject, body), once per draft, to REPORT_TO (or DRAFTS_TO if set).
    `scripts/gershon_reports.py drafts` emails all drafts currently waiting.
    Needs deploying to /opt/harvey (same as edc2cdb new-lead email).
+❌ Leads into Streak GC Campaigns (2026-11-11, branch gershon/streak-h01-sync):
+   scripts/gershon_streak.py copies every company Harvey finds (usable prospects only,
+   'unfit' skipped) into Streak pipeline "GC Campaigns" as one box per company, Origin = H01,
+   stage "1. Contacted", prospects (name, title, email, LinkedIn, source) in the notes. Dedupe
+   by state file data/gershon_streak.json and by company name already in the pipeline (a CC01
+   box is never changed, only commented). An interested reply moves the box to "2. Responded".
+   Runs inside the 15-min alerts timer once STREAK_API_KEY is in /opt/harvey/.env.
+   Backfill on deploy: sudo -u harvey .venv/bin/python scripts/gershon_streak.py dry-run, then sync.
+   Same PR: the "N new prospect reply(ies)" alert counted every inbox message Harvey checked
+   (newsletters); it now counts conversations where a prospect actually wrote back.
+   5 leads were added to Streak by hand on 2026-11-11 (GoodCore, Munro Agency, iCreativez,
+   RevenueBase, Techreviewer); the sync reuses those boxes.
+   Needs deploying (his OK) + a Streak API key (Streak > Settings > Integrations).
 ❌ Note: container `linalysis` restart-loops (reinstalls on each start) and is the likely
    cause of the VPS "CPU limitation activated" warning.
 ❌ No sending mailbox, postal address, or email-verification key yet (Olivier to decide).

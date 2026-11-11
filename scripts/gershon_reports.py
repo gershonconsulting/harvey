@@ -68,6 +68,14 @@ def sh(cmd, timeout=120):
         return f"(could not run {cmd[0]}: {e})"
 
 
+def prospect_wrote(thread_json):
+    try:
+        msgs = json.loads(thread_json or "[]")
+    except (TypeError, ValueError):
+        return False
+    return any(isinstance(m, dict) and m.get("sender") == "prospect" for m in msgs)
+
+
 def snapshot():
     status = sh([str(ROOT / ".venv/bin/harvey"), "status", "--check"])
     service = sh(["systemctl", "is-active", "harvey"])
@@ -75,6 +83,7 @@ def snapshot():
     prospects = dict(q("SELECT status, COUNT(*) FROM prospects GROUP BY status"))
     open_conv = q("SELECT COUNT(*) FROM conversations WHERE status='open'")
     replies = q("SELECT COUNT(*) FROM processed_replies")
+    convs = q("SELECT thread_json FROM conversations")
     errors = q("SELECT to_email, subject, error, updated_at FROM outbox "
                "WHERE error != '' ORDER BY updated_at DESC LIMIT 5")
     sent_24h = q("SELECT COUNT(*) FROM outbox WHERE sent_at >= datetime('now','-1 day')")
@@ -86,7 +95,10 @@ def snapshot():
         "prospects": prospects,
         "pending_review": outbox.get("pending_review", 0),
         "open_conversations": open_conv[0][0] if open_conv else 0,
-        "replies_total": replies[0][0] if replies else 0,
+        # every inbox message Harvey looked at (newsletters included), NOT prospect replies
+        "inbox_checked": replies[0][0] if replies else 0,
+        # conversations where a prospect actually wrote back
+        "prospect_replies": sum(1 for (t,) in convs if prospect_wrote(t)),
         "sent_24h": sent_24h[0][0] if sent_24h else 0,
         "errors": [list(e) for e in errors],
     }
@@ -224,7 +236,8 @@ def fmt(s):
         f"Emails waiting for your approval: {s['pending_review']}",
         f"Emails sent in last 24h: {s['sent_24h']}",
         f"Open conversations: {s['open_conversations']}",
-        f"Replies processed (total): {s['replies_total']}",
+        f"Prospect replies (total): {s['prospect_replies']}",
+        f"Inbox messages checked (total, incl. newsletters): {s.get('inbox_checked', 0)}",
         f"Outbox by status: {s['outbox'] or '{}'}",
         f"Prospects by status: {s['prospects'] or '{}'}",
     ]
@@ -281,18 +294,27 @@ def main():
         alerts.append("Harvey's brain (ChatGPT/Codex login) is NOT READY — Harvey is paused.")
     if s["pending_review"] > prev.get("pending_review", 0) and not fresh:
         alerts.append(f"{s['pending_review']} email(s) are waiting for your approval.")
-    if s["replies_total"] > prev.get("replies_total", 0):
-        alerts.append(f"{s['replies_total'] - prev.get('replies_total', 0)} new prospect reply(ies).")
+    if s["prospect_replies"] > prev.get("prospect_replies", 0):
+        alerts.append(f"{s['prospect_replies'] - prev.get('prospect_replies', 0)} new prospect reply(ies).")
     new_err = [e for e in s["errors"] if e not in prev.get("errors", [])]
     if new_err and prev:
         alerts.append(f"{len(new_err)} new send error(s): " + "; ".join(e[2] for e in new_err))
-    state = {k: s[k] for k in ("service", "brain_ready", "pending_review", "replies_total", "errors")}
+    state = {k: s[k] for k in ("service", "brain_ready", "pending_review", "prospect_replies", "errors")}
     state["leads_notified"] = sorted(seen)
     # keep only ids still pending, so the state file does not grow forever
     state["drafts_notified"] = sorted(drafts_seen & still_pending)
     STATE.write_text(json.dumps(state))
     if alerts and prev:
         send(env, "❌ GC Harvey: " + alerts[0][:80], "\n".join(alerts) + "\n\n" + fmt(s))
+    if env.get("STREAK_API_KEY"):
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import gershon_streak
+            gershon_streak.DB = DB
+            gershon_streak.STATE = ROOT / "data" / "gershon_streak.json"
+            gershon_streak.sync(env)
+        except Exception as e:  # noqa: BLE001
+            print(f"streak sync failed: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":
