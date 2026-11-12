@@ -52,6 +52,12 @@ STATUS
    company, subject, body), once per draft, to REPORT_TO (or DRAFTS_TO if set).
    `scripts/gershon_reports.py drafts` emails all drafts currently waiting.
    Needs deploying to /opt/harvey (same as edc2cdb new-lead email).
+❌ Review page (2026-11-10, branch gershon/review-page): `harvey review-page` serves a private
+   page on 127.0.0.1:5556 to edit / approve / reject each email waiting for approval (no
+   approve-all, nothing is sent from it). Public via Caddy at harvey.gershon.ai (only /review
+   is published). Link = https://harvey.gershon.ai/review#k=<data/review-token>; the alert,
+   drafts and daily emails include it once HARVEY_REVIEW_URL is in .env. Deploy steps in
+   STATUS.md; files in scripts/deploy/. Needs Olivier's OK (production change).
 ❌ Note: container `linalysis` restart-loops (reinstalls on each start) and is the likely
    cause of the VPS "CPU limitation activated" warning.
 ❌ No sending mailbox, postal address, or email-verification key yet (Olivier to decide).

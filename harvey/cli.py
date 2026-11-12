@@ -191,6 +191,25 @@ def cmd_dashboard(args):
         sys.exit(2)
 
 
+def cmd_review_page(args):
+    """Serve the private review page for emails waiting for approval (Gershon)."""
+    from harvey.dashboard import DashboardSetupError
+    from harvey.dashboard_auth import TokenError
+    from harvey.review_app import review_link, start_review_page
+
+    try:
+        if getattr(args, "url", False):
+            from dotenv import load_dotenv
+            from harvey.paths import PROJECT_ROOT
+            load_dotenv(PROJECT_ROOT / ".env")
+            print(review_link())
+            return
+        start_review_page(host=args.host, port=args.port)
+    except (DashboardSetupError, TokenError) as e:
+        print(f"\n  Review page not started: {e}\n")
+        sys.exit(2)
+
+
 def cmd_status(args):
     """Show current pipeline status."""
     from harvey.state import StateManager
@@ -1024,6 +1043,16 @@ def main():
     sub.add_argument("--url", action="store_true",
                      help="Print the unlock link (with its token) and exit")
     sub.set_defaults(func=cmd_dashboard)
+
+    # harvey review-page (Gershon add-on)
+    sub = subparsers.add_parser("review-page",
+                                help="Serve the private page to approve waiting emails")
+    sub.add_argument("--host", default="127.0.0.1",
+                     help="Loopback address to listen on (put HTTPS in front of it)")
+    sub.add_argument("--port", type=int, default=5556, help="Port (default: 5556)")
+    sub.add_argument("--url", action="store_true",
+                     help="Print the private link (uses HARVEY_REVIEW_URL) and exit")
+    sub.set_defaults(func=cmd_review_page)
 
     # harvey status
     sub = subparsers.add_parser("status", help="Show pipeline status")

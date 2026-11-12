@@ -19,6 +19,10 @@ Config (in /opt/harvey/.env):
   RESEND_API_KEY=...            send-only key, gershon.ai domain
   REPORT_TO=harvey@gershonconsulting.com
   REPORT_FROM=GC Harvey <harvey@gershon.ai>
+  HARVEY_REVIEW_URL=https://harvey.gershon.ai   public address of `harvey review-page`;
+                                when set, every email about waiting drafts carries
+                                the private link to approve them (key read from
+                                data/review-token).
 Stdlib only; reads data/harvey.db read-only and never changes Harvey's state.
 """
 import json
@@ -44,8 +48,33 @@ def load_env():
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip().strip('"').strip("'")
-    env.update({k: v for k, v in os.environ.items() if k.startswith(("RESEND_", "REPORT_"))})
+    env.update({k: v for k, v in os.environ.items()
+                if k.startswith(("RESEND_", "REPORT_", "HARVEY_REVIEW_"))})
     return env
+
+
+REVIEW_TOKEN = ROOT / "data" / "review-token"
+
+
+def review_link(env):
+    """The private link to the review page, or '' when it isn't set up."""
+    base = (env.get("HARVEY_REVIEW_URL") or "").strip().rstrip("/")
+    if not base.startswith("https://"):
+        return ""
+    try:
+        key = REVIEW_TOKEN.read_text().strip()
+    except OSError:
+        return ""
+    if not (43 <= len(key) <= 128) or not all(c.isalnum() or c in "-_" for c in key):
+        return ""
+    return f"{base}/review#k={key}"
+
+
+def review_lines(env):
+    link = review_link(env)
+    if not link:
+        return []
+    return ["Review, edit and approve them here (private link, don't forward it):", link, ""]
 
 
 def q(sql, args=()):
@@ -129,10 +158,11 @@ def pending_drafts():
                 ORDER BY o.created_at, o.id""")
 
 
-def fmt_drafts(drafts):
+def fmt_drafts(drafts, env=None):
     """Plain-text email body: one numbered block per draft, full text, nothing cut."""
     out = [f"{len(drafts)} email draft(s) waiting for your approval in Harvey.",
            "Nothing has been sent. Each draft goes out only after it is approved.", ""]
+    out += review_lines(env or {})
     for i, d in enumerate(drafts, 1):
         oid, to, subject, body, step, kind, created, first, last, title, company, site = d
         name = f"{first} {last}".strip() or "-"
@@ -160,7 +190,7 @@ def send_drafts(env, drafts, label="new"):
     draft_env = dict(env)
     if env.get("DRAFTS_TO"):
         draft_env["REPORT_TO"] = env["DRAFTS_TO"]
-    return send(draft_env, subject, fmt_drafts(drafts))
+    return send(draft_env, subject, fmt_drafts(drafts, env))
 
 
 def new_leads(seen):
@@ -217,8 +247,9 @@ def send_lead(env, r):
     return send(lead_env, subject, body)
 
 
-def fmt(s):
-    lines = [
+def fmt(s, env=None):
+    lines = review_lines(env or {}) if s.get("pending_review") else []
+    lines += [
         f"Service: {s['service']}",
         f"Brain (ChatGPT/Codex): {'ready' if s['brain_ready'] else 'NOT READY'}",
         f"Emails waiting for your approval: {s['pending_review']}",
@@ -243,7 +274,7 @@ def main():
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if mode == "daily":
         flag = "❌" if (s["service"] != "active" or not s["brain_ready"] or s["pending_review"]) else "✅"
-        send(env, f"{flag} GC Harvey daily report {today}", fmt(s))
+        send(env, f"{flag} GC Harvey daily report {today}", fmt(s, env))
         return
     if mode == "test-lead":
         send_lead(env, ("test", "interested", "presenting", json.dumps([{"sender": "prospect",
@@ -292,7 +323,7 @@ def main():
     state["drafts_notified"] = sorted(drafts_seen & still_pending)
     STATE.write_text(json.dumps(state))
     if alerts and prev:
-        send(env, "❌ GC Harvey: " + alerts[0][:80], "\n".join(alerts) + "\n\n" + fmt(s))
+        send(env, "❌ GC Harvey: " + alerts[0][:80], "\n".join(alerts) + "\n\n" + fmt(s, env))
 
 
 if __name__ == "__main__":
