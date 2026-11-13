@@ -17,6 +17,14 @@ SALES.GERSHON.AI LINK (2026-11-11) — Olivier: "I have no idea where Harvey's l
    SALES_INGEST_TOKEN (random) to /opt/harvey/.env, put its SHA-256 in sales D1
    (harvey_meta k='ingest_sha256'), systemctl enable --now harvey-sales-sync.timer
 
+2026-11-13 ALERT NOISE (branch nightly/2026-11-13-harvey-alert-once): scripts/gershon_reports.py -
+   "N emails waiting for approval" alert now at most once per UTC day unless N grows past the last N
+   sent (state: waiting_sent_date / waiting_sent_n in data/gershon_alerts.json); red-cross prefix only
+   for real failures (service down, brain not ready, send errors), info mails use the info sign / check
+   mark. Tests: tests/test_gershon_reports_alert_once.py. Typo address "harvery@" is NOT in the repo
+   (check REPORT_TO / DRAFTS_TO / LEAD_TO in /opt/harvey/.env on the VPS).
+   Needs deploying to /opt/harvey.
+
 STATUS
 ------
 ✅ Repo gershonconsulting/harvey (private): upstream Harvey + Gershon config
