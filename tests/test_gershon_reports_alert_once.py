@@ -54,7 +54,7 @@ def setup(tmp_path, monkeypatch, n, state, brain_ok=True, mode="alerts"):
     monkeypatch.setattr(mod, "send", lambda env, subj, text: sent.append(subj) or True)
     monkeypatch.setattr(mod, "sh", lambda cmd, timeout=120:
                         "active" if cmd[0] == "systemctl" else ("ok" if brain_ok else "NOT READY"))
-    monkeypatch.setattr(mod, "load_env", lambda: {})
+    monkeypatch.setattr(mod, "load_env", lambda: {"GMAIL_DRAFTS": "0"})
     monkeypatch.setattr(mod.sys, "argv", ["x", mode])
     return mod, sent
 

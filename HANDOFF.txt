@@ -112,3 +112,13 @@ BEFORE ANY EMAIL GOES OUT (Olivier's decisions)
   persona.email set. ❌ Gmail OAuth (GMAIL_CLIENT_ID/SECRET + harvey gmail auth) or SMTP app password.
 - Discovery: TINYFISH_API_KEY (free) or SERPER_API_KEY (2,500 free) in .env;
   then: harvey discover --preset hiring --provider serper
+
+== 2026-11-13 Gmail Drafts = the review place (branch gershon/gmail-drafts-review, includes PR #7 + #8) ==
+✅ scripts/gershon_gmail_drafts.py + scripts/deploy/harvey-gmail-drafts.{service,timer} (every 10 min, user harvey).
+   Every email waiting for approval -> draft in olivier@gershonconsulting.net (signature + BCC harvey@).
+   Send it from Gmail = Harvey marks it sent (lead contacted, follow-up scheduled, next step drafted in
+   the same thread once its wait is over). Delete it = rejected. Rejected/edited/approved in
+   sales.gershon.ai = Gmail draft removed/replaced. State data/gmail_drafts.json.
+   One notice email per batch of new drafts with the Gmail link.
+✅ gershon_reports.py: GMAIL_DRAFTS (default on) -> no full-text drafts email, no "N waiting" alert;
+   daily report points to Gmail Drafts. GMAIL_DRAFTS=0 in .env restores the old emails.

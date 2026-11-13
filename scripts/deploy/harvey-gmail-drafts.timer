@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync Harvey's emails waiting for approval with Gmail Drafts every 10 minutes
+
+[Timer]
+OnBootSec=4min
+OnUnitActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -234,11 +234,22 @@ def send_lead(env, r):
     return send(lead_env, subject, body)
 
 
-def fmt(s):
+GMAIL_DRAFTS_LINK = "https://mail.google.com/mail/u/olivier@gershonconsulting.net/#drafts"
+
+
+def gmail_review(env):
+    """Review happens in Gmail Drafts (scripts/gershon_gmail_drafts.py): no
+    draft-by-email, no separate "waiting" alert — that script sends one notice."""
+    return env.get("GMAIL_DRAFTS", "1") != "0"
+
+
+def fmt(s, env=None):
+    where = (f" — review them in Gmail Drafts: {GMAIL_DRAFTS_LINK}"
+             if s["pending_review"] and gmail_review(env or {}) else "")
     lines = [
         f"Service: {s['service']}",
         f"Brain (ChatGPT/Codex): {'ready' if s['brain_ready'] else 'NOT READY'}",
-        f"Emails waiting for your approval: {s['pending_review']}",
+        f"Emails waiting for your approval: {s['pending_review']}{where}",
         f"Emails sent in last 24h: {s['sent_24h']}",
         f"Open conversations: {s['open_conversations']}",
         f"Replies processed (total): {s['replies_total']}",
@@ -262,7 +273,7 @@ def main():
         # red cross only for real failures; waiting drafts are information, not a fault
         flag = ("❌" if (s["service"] != "active" or not s["brain_ready"])
                 else "ℹ️" if s["pending_review"] else "✅")
-        send(env, f"{flag} GC Harvey daily report {today}", fmt(s))
+        send(env, f"{flag} GC Harvey daily report {today}", fmt(s, env))
         return
     if mode == "test-lead":
         send_lead(env, ("test", "interested", "presenting", json.dumps([{"sender": "prospect",
@@ -286,6 +297,9 @@ def main():
             print(f"lead email failed for {r[0]}: {e}", file=sys.stderr)
     drafts_seen = set(prev.get("drafts_notified", []))
     fresh = [d for d in pending_drafts() if d[0] not in drafts_seen]
+    if fresh and gmail_review(env):
+        drafts_seen.update(d[0] for d in fresh)  # they go to Gmail Drafts instead
+        fresh = []
     if fresh:
         try:
             if send_drafts(env, fresh):
@@ -299,7 +313,8 @@ def main():
         alerts.append((True, f"Harvey service is {s['service']} (was active)."))
     if not s["brain_ready"] and prev.get("brain_ready", True):
         alerts.append((True, "Harvey's brain (ChatGPT/Codex login) is NOT READY — Harvey is paused."))
-    if waiting_alert_due(s["pending_review"], prev.get("pending_review", 0), prev, today) and not fresh:
+    if (not gmail_review(env) and not fresh
+            and waiting_alert_due(s["pending_review"], prev.get("pending_review", 0), prev, today)):
         alerts.append((False, f"{s['pending_review']} email(s) are waiting for your approval."))
         waiting_sent = True
     if s["replies_total"] > prev.get("replies_total", 0):
