@@ -6,6 +6,10 @@
                                 needs to know (service down, brain not ready,
                                 emails waiting for approval, new replies,
                                 send errors). State kept in data/gershon_alerts.json.
+                                The "N waiting for approval" alert goes out at most once
+                                per UTC day, unless N grows past the last N we told you.
+                                Subject prefix: failures (service down, brain not ready,
+                                send errors) get a red cross; info mails get an info sign.
                                 Also sends ONE email per new lead (a prospect whose
                                 reply Harvey classified as interested), subject
                                 "GC Campaign H01 — New lead: <name>, <company>".
@@ -156,11 +160,24 @@ def send_drafts(env, drafts, label="new"):
     if not drafts:
         return False
     names = ", ".join(sorted({d[10] for d in drafts if d[10]}))[:80]
-    subject = f"❌ GC Harvey: {len(drafts)} {label} draft(s) to approve" + (f" — {names}" if names else "")
+    subject = f"ℹ️ GC Harvey: {len(drafts)} {label} draft(s) to approve" + (f" — {names}" if names else "")
     draft_env = dict(env)
     if env.get("DRAFTS_TO"):
         draft_env["REPORT_TO"] = env["DRAFTS_TO"]
     return send(draft_env, subject, fmt_drafts(drafts))
+
+
+def waiting_alert_due(n, prev_pending, state, today):
+    """Should the "N waiting for approval" alert go out now?
+
+    Needs N to have grown since the last run, and either nothing was sent yet today or
+    N is higher than the N we last told you about (so 33 -> 32 -> 33 stays quiet).
+    """
+    if n <= prev_pending:
+        return False
+    if state.get("waiting_sent_date") != today:
+        return True
+    return n > state.get("waiting_sent_n", 0)
 
 
 def new_leads(seen):
@@ -217,11 +234,22 @@ def send_lead(env, r):
     return send(lead_env, subject, body)
 
 
-def fmt(s):
+GMAIL_DRAFTS_LINK = "https://mail.google.com/mail/u/olivier@gershonconsulting.net/#drafts"
+
+
+def gmail_review(env):
+    """Review happens in Gmail Drafts (scripts/gershon_gmail_drafts.py): no
+    draft-by-email, no separate "waiting" alert — that script sends one notice."""
+    return env.get("GMAIL_DRAFTS", "1") != "0"
+
+
+def fmt(s, env=None):
+    where = (f" — review them in Gmail Drafts: {GMAIL_DRAFTS_LINK}"
+             if s["pending_review"] and gmail_review(env or {}) else "")
     lines = [
         f"Service: {s['service']}",
         f"Brain (ChatGPT/Codex): {'ready' if s['brain_ready'] else 'NOT READY'}",
-        f"Emails waiting for your approval: {s['pending_review']}",
+        f"Emails waiting for your approval: {s['pending_review']}{where}",
         f"Emails sent in last 24h: {s['sent_24h']}",
         f"Open conversations: {s['open_conversations']}",
         f"Replies processed (total): {s['replies_total']}",
@@ -242,8 +270,10 @@ def main():
     s = snapshot()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if mode == "daily":
-        flag = "❌" if (s["service"] != "active" or not s["brain_ready"] or s["pending_review"]) else "✅"
-        send(env, f"{flag} GC Harvey daily report {today}", fmt(s))
+        # red cross only for real failures; waiting drafts are information, not a fault
+        flag = ("❌" if (s["service"] != "active" or not s["brain_ready"])
+                else "ℹ️" if s["pending_review"] else "✅")
+        send(env, f"{flag} GC Harvey daily report {today}", fmt(s, env))
         return
     if mode == "test-lead":
         send_lead(env, ("test", "interested", "presenting", json.dumps([{"sender": "prospect",
@@ -267,6 +297,9 @@ def main():
             print(f"lead email failed for {r[0]}: {e}", file=sys.stderr)
     drafts_seen = set(prev.get("drafts_notified", []))
     fresh = [d for d in pending_drafts() if d[0] not in drafts_seen]
+    if fresh and gmail_review(env):
+        drafts_seen.update(d[0] for d in fresh)  # they go to Gmail Drafts instead
+        fresh = []
     if fresh:
         try:
             if send_drafts(env, fresh):
@@ -274,25 +307,42 @@ def main():
         except Exception as e:  # noqa: BLE001
             print(f"drafts email failed: {e}", file=sys.stderr)
     still_pending = {d[0] for d in pending_drafts()}
-    alerts = []
+    alerts = []      # (is_failure, text)
+    waiting_sent = False
     if s["service"] != "active" and prev.get("service") == "active":
-        alerts.append(f"Harvey service is {s['service']} (was active).")
+        alerts.append((True, f"Harvey service is {s['service']} (was active)."))
     if not s["brain_ready"] and prev.get("brain_ready", True):
-        alerts.append("Harvey's brain (ChatGPT/Codex login) is NOT READY — Harvey is paused.")
-    if s["pending_review"] > prev.get("pending_review", 0) and not fresh:
-        alerts.append(f"{s['pending_review']} email(s) are waiting for your approval.")
+        alerts.append((True, "Harvey's brain (ChatGPT/Codex login) is NOT READY — Harvey is paused."))
+    if (not gmail_review(env) and not fresh
+            and waiting_alert_due(s["pending_review"], prev.get("pending_review", 0), prev, today)):
+        alerts.append((False, f"{s['pending_review']} email(s) are waiting for your approval."))
+        waiting_sent = True
     if s["replies_total"] > prev.get("replies_total", 0):
-        alerts.append(f"{s['replies_total'] - prev.get('replies_total', 0)} new prospect reply(ies).")
+        alerts.append((False, f"{s['replies_total'] - prev.get('replies_total', 0)} new prospect reply(ies)."))
     new_err = [e for e in s["errors"] if e not in prev.get("errors", [])]
     if new_err and prev:
-        alerts.append(f"{len(new_err)} new send error(s): " + "; ".join(e[2] for e in new_err))
+        alerts.append((True, f"{len(new_err)} new send error(s): " + "; ".join(e[2] for e in new_err)))
     state = {k: s[k] for k in ("service", "brain_ready", "pending_review", "replies_total", "errors")}
     state["leads_notified"] = sorted(seen)
     # keep only ids still pending, so the state file does not grow forever
     state["drafts_notified"] = sorted(drafts_seen & still_pending)
-    STATE.write_text(json.dumps(state))
+    # last "waiting" alert actually sent: kept across runs, reset by the date check
+    state["waiting_sent_date"] = prev.get("waiting_sent_date", "")
+    state["waiting_sent_n"] = prev.get("waiting_sent_n", 0)
     if alerts and prev:
-        send(env, "❌ GC Harvey: " + alerts[0][:80], "\n".join(alerts) + "\n\n" + fmt(s))
+        failure = any(f for f, _ in alerts)
+        texts = [t for _, t in alerts]
+        try:
+            send(env, ("❌" if failure else "ℹ️") + " GC Harvey: " + texts[0][:80],
+                 "\n".join(texts) + "\n\n" + fmt(s))
+            if waiting_sent:
+                if state["waiting_sent_date"] != today:
+                    state["waiting_sent_n"] = 0
+                state["waiting_sent_date"] = today
+                state["waiting_sent_n"] = max(state["waiting_sent_n"], s["pending_review"])
+        except Exception as e:  # noqa: BLE001
+            print(f"alert email failed: {e}", file=sys.stderr)
+    STATE.write_text(json.dumps(state))
 
 
 if __name__ == "__main__":

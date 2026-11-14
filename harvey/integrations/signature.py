@@ -146,13 +146,39 @@ def signature_text(config) -> str:
     return (getattr(_settings(config), "text", "") or "").strip("\n")
 
 
+_SIGN_OFF_WORDS = re.compile(
+    r"^(best( regards)?|kind regards|regards|warm regards|cheers|thanks|thank you|many thanks|"
+    r"all the best|speak (with|to) you soon|talk soon|sincerely)[,.!]?$", re.I)
+
+
+def _drop_own_sign_off(body: str, config) -> str:
+    """Drafts written before the sign-off rule end with the sender's own
+    name (and maybe "Best regards,"). With a signature block that would be
+    signed twice, so a trailing name line, and a sign-off word right above
+    it, are dropped. Anything else in the body is left alone."""
+    persona = getattr(config, "persona", None)
+    name = (getattr(persona, "name", "") or "").strip()
+    if not name:
+        return body
+    names = {name.lower(), name.split()[0].lower()}
+    lines = body.rstrip().split("\n")
+    if not lines or lines[-1].strip().rstrip(".,").lower() not in names:
+        return body
+    lines.pop()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if lines and _SIGN_OFF_WORDS.match(lines[-1].strip()):
+        lines.pop()
+    return "\n".join(lines).rstrip()
+
+
 def with_signature(body: str, config) -> str:
     """``body`` with the sign-off block under it. Not added twice."""
     text = signature_text(config)
     body = (body or "").rstrip()
     if not text or body.endswith(text.rstrip()):
         return body
-    return body + "\n\n" + text
+    return _drop_own_sign_off(body, config) + "\n\n" + text
 
 
 def bcc_addresses(config) -> list[str]:

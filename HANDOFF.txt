@@ -17,6 +17,14 @@ SALES.GERSHON.AI LINK (2026-11-11) — Olivier: "I have no idea where Harvey's l
    SALES_INGEST_TOKEN (random) to /opt/harvey/.env, put its SHA-256 in sales D1
    (harvey_meta k='ingest_sha256'), systemctl enable --now harvey-sales-sync.timer
 
+2026-11-13 ALERT NOISE (branch nightly/2026-11-13-harvey-alert-once): scripts/gershon_reports.py -
+   "N emails waiting for approval" alert now at most once per UTC day unless N grows past the last N
+   sent (state: waiting_sent_date / waiting_sent_n in data/gershon_alerts.json); red-cross prefix only
+   for real failures (service down, brain not ready, send errors), info mails use the info sign / check
+   mark. Tests: tests/test_gershon_reports_alert_once.py. Typo address "harvery@" is NOT in the repo
+   (check REPORT_TO / DRAFTS_TO / LEAD_TO in /opt/harvey/.env on the VPS).
+   Needs deploying to /opt/harvey.
+
 STATUS
 ------
 ✅ Repo gershonconsulting/harvey (private): upstream Harvey + Gershon config
@@ -104,3 +112,21 @@ BEFORE ANY EMAIL GOES OUT (Olivier's decisions)
   persona.email set. ❌ Gmail OAuth (GMAIL_CLIENT_ID/SECRET + harvey gmail auth) or SMTP app password.
 - Discovery: TINYFISH_API_KEY (free) or SERPER_API_KEY (2,500 free) in .env;
   then: harvey discover --preset hiring --provider serper
+
+== 2026-11-13 Gmail Drafts = the review place (branch gershon/gmail-drafts-review, includes PR #7 + #8) ==
+✅ scripts/gershon_gmail_drafts.py + scripts/deploy/harvey-gmail-drafts.{service,timer} (every 10 min, user harvey).
+   Every email waiting for approval -> draft in olivier@gershonconsulting.net (signature + BCC harvey@).
+   Send it from Gmail = Harvey marks it sent (lead contacted, follow-up scheduled, next step drafted in
+   the same thread once its wait is over). Delete it = rejected. Rejected/edited/approved in
+   sales.gershon.ai = Gmail draft removed/replaced. State data/gmail_drafts.json.
+   One notice email per batch of new drafts with the Gmail link.
+✅ gershon_reports.py: GMAIL_DRAFTS (default on) -> no full-text drafts email, no "N waiting" alert;
+   daily report points to Gmail Drafts. GMAIL_DRAFTS=0 in .env restores the old emails.
+✅ 2026-11-14: Gmail sync live on the VPS (timer every 10 min, OnCalendar). Deleting a draft never rejects (only drops that version).
+✅ H01 campaign format (scripts/gershon_h01_format.py): one email per company to up to 2 people; 7 fixed parts. 12 emails rewritten
+   by Claude from Harvey's research + web-checked facts and put in Gmail Drafts; 5 leads kept out (4 US companies, 1 junk).
+❌ Codex login: last_refresh > 8 days -> Harvey's brain refuses calls ("expired or due for renewal"); harvey-codex-renew's
+   'codex exec' does not rewrite auth.json while the access token is still valid. Clears when the token expires (~19h after
+   2026-11-14 01:00 UTC) or with a device-code re-login. Until then Harvey writes no new emails.
+❌ Most companies have only a general inbox: Harvey's verifier marked the founders' guessed addresses invalid. 2 people per company
+   needs a real second contact (finder/enrichment).

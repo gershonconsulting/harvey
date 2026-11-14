@@ -1,0 +1,9 @@
+[Unit]
+Description=Sync Harvey emails waiting for approval with Gmail Drafts every 10 minutes
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+
+[Install]
+WantedBy=timers.target
