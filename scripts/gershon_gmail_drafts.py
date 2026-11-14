@@ -10,7 +10,8 @@ Two-way, every run (systemd timer, every 10 minutes):
     went out and its planned wait is over, in the same Gmail thread)
   * you SEND the draft from Gmail         -> Harvey records it as sent, so the
     lead is "contacted", follow-ups are scheduled, replies are tracked
-  * you DELETE the draft in Gmail         -> Harvey records it as rejected
+  * you DELETE the draft in Gmail         -> nothing is rejected; that version
+    is not put back (a rewritten email comes back as a new draft)
   * rejected / edited / approved elsewhere (sales.gershon.ai, dashboard)
                                           -> the Gmail draft is removed or
                                              replaced, so it can't go out twice
@@ -30,6 +31,8 @@ from pathlib import Path
 
 ROOT = Path(os.environ.get("HARVEY_ROOT", "/opt/harvey"))
 STATE_FILE = ROOT / "data" / "gmail_drafts.json"
+DISMISSED_FILE = ROOT / "data" / "gmail_drafts_dismissed.json"  # {outbox_id: content hash}
+FORMAT_FILE = ROOT / "data" / "gershon_h01_format.json"
 OLD_DONE = ROOT / "data" / "gmail_drafts_done.json"
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 MAILBOX = "olivier@gershonconsulting.net"
@@ -47,7 +50,7 @@ def decide(row, entry, draft_alive, sent_msg):
     row: the outbox row now (None if gone). entry: what we stored. draft_alive:
     the Gmail draft still exists. sent_msg: a SENT message found in its Gmail
     thread (or None). Returns one of:
-      keep | mark_sent | mark_rejected | delete_draft | replace_draft | forget
+      keep | mark_sent | dismiss | delete_draft | replace_draft | forget
     """
     status = (row or {}).get("status")
     if status == "pending_review":
@@ -55,7 +58,7 @@ def decide(row, entry, draft_alive, sent_msg):
             if entry.get("hash") and entry["hash"] != content_hash(row["subject"], row["body"]):
                 return "replace_draft"  # edited in sales.gershon.ai / dashboard
             return "keep"
-        return "mark_sent" if sent_msg else "mark_rejected"
+        return "mark_sent" if sent_msg else "dismiss"
     # approved, sent by Harvey, rejected, cancelled, or the row is gone
     if draft_alive:
         return "delete_draft"
@@ -165,7 +168,7 @@ def make_draft_provider(cfg, env):
 
 
 async def main(dry=False):
-    os.chdir(ROOT); sys.path.insert(0, str(ROOT))
+    os.chdir(ROOT); sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
     from harvey.config import load_config, load_env
     from harvey.state import StateManager
     from harvey.agents.sender import compliance_footer_lines
@@ -187,11 +190,15 @@ async def main(dry=False):
             async with db.execute(sql, args) as cur:
                 return [dict(r) for r in await cur.fetchall()]
 
-    pending = await rows(
-        "SELECT o.*, COALESCE(p.first_name,'') fn, COALESCE(p.last_name,'') ln, "
+    PENDING_SQL = (
+        "SELECT o.*, COALESCE(p.first_name,'') fn, COALESCE(p.last_name,'') ln, COALESCE(p.title,'') title, "
+        "COALESCE(p.personalization_notes,'') notes, COALESCE(p.email_status,'') email_status, "
+        "COALESCE(p.company_id,'') company_id, "
         "COALESCE(NULLIF(p.company,''), co.name, '') company FROM outbox o "
         "LEFT JOIN prospects p ON p.id = o.prospect_id LEFT JOIN companies co ON co.id = p.company_id "
         "WHERE o.status = 'pending_review' ORDER BY o.created_at")
+    pending = await rows(PENDING_SQL)
+    dismissed = json.loads(DISMISSED_FILE.read_text()) if DISMISSED_FILE.exists() else {}
 
     # 1. take over drafts made by the first version of this script
     if not STATE_FILE.exists() and OLD_DONE.exists():
@@ -206,10 +213,18 @@ async def main(dry=False):
                 tracked[oid] = {"draft": d["id"], "thread": thread, "hash": ""}
         log.append(f"took over {len(tracked)} existing Gmail drafts")
 
+    def save():
+        if not dry:
+            STATE_FILE.write_text(json.dumps(tracked, indent=1))
+            DISMISSED_FILE.write_text(json.dumps(dismissed, indent=1))
+
     # 2. follow what happened to every draft we made
+    alive_cache = {}
     for oid, entry in list(tracked.items()):
         row = await st.get_outbox_item(oid)
-        alive = await gm.draft_alive(entry["draft"])
+        if entry["draft"] not in alive_cache:
+            alive_cache[entry["draft"]] = await gm.draft_alive(entry["draft"])
+        alive = alive_cache[entry["draft"]]
         sent = None if alive else await gm.sent_in_thread(entry.get("thread"), (row or {}).get("to_email", ""))
         action = decide(row, entry, alive, sent)
         who = (row or {}).get("to_email", oid)
@@ -228,26 +243,88 @@ async def main(dry=False):
                     await st.update_prospect_status(p.id, "contacted")
             await st.log_action("email_sent", "user", {"to": who, "step": row.get("step"),
                                                        "kind": row.get("kind"), "via": "gmail_draft"})
-            tracked.pop(oid)
-        elif action == "mark_rejected":
-            await st.reject_outbox_item(oid)
-            await st.log_action("outbox_rejected", "user", {"to": who, "via": "gmail_draft_deleted"})
-            tracked.pop(oid)
-        elif action == "delete_draft":
+        elif action == "dismiss":
+            # deleted in Gmail: never a rejection; this version is not put back
+            dismissed[oid] = content_hash(row["subject"], row["body"])
+        elif action in ("delete_draft", "replace_draft") and alive_cache.get(entry["draft"]):
             await gm.delete_draft(entry["draft"])
-            tracked.pop(oid)
-        elif action == "replace_draft":
-            await gm.delete_draft(entry["draft"])
-            tracked.pop(oid)  # re-created below with the new text
-        elif action == "forget":
-            tracked.pop(oid)
-        STATE_FILE.write_text(json.dumps(tracked, indent=1))
+            alive_cache[entry["draft"]] = False
+        tracked.pop(oid)
+        save()
 
-    # 3. new drafts
-    made = []
+    # 3. Gershon campaign format: one email per company, two people
+    if not dry or "--format-preview" in sys.argv:
+        import gershon_h01_format as fmt
+        from harvey.brain import Brain
+        from harvey.untrusted import UNTRUSTED_RULE, fence
+        from harvey.company_names import clean_company_name
+        fstate = json.loads(FORMAT_FILE.read_text()) if FORMAT_FILE.exists() else {}
+        brain = Brain(st, cfg.brain)
+        groups = {}
+        for r in pending:
+            if r["kind"] == "sequence" and int(r["step"] or 1) == 1 and r["id"] not in tracked:
+                groups.setdefault(fmt.company_key(r), []).append(r)
+        limit = int(os.environ.get("FORMAT_LIMIT", "0") or 0)
+        done_n = 0
+        for key, grp in groups.items():
+            keep, extra = fmt.choose_two(grp)
+            ids = sorted(r["id"] for r in keep)
+            if fstate.get(key, {}).get("ids") == ids and fstate[key].get("hash") == fmt.group_hash(keep):
+                continue  # already in the campaign format
+            if limit and done_n >= limit:
+                break
+            company_name = clean_company_name(keep[0]["company"] or keep[0]["to_email"].split("@")[-1])
+            company = await st.get_company(keep[0]["company_id"]) if keep[0]["company_id"] else None
+            prompt = fmt.build_prompt(company_name, company, keep, UNTRUSTED_RULE, fence)
+            out = None
+            for _ in range(2):
+                res = await brain.think_json(prompt, session_id="gershon-h01", agent="writer", task="gershon_h01")
+                if isinstance(res, dict):
+                    subj, body = str(res.get("subject") or "").strip(), str(res.get("body") or "").strip()
+                    problems = fmt.check_email(subj, body, keep, company_name)
+                    if not problems:
+                        out = (subj[:120], body)
+                        break
+                    log.append(f"format retry {company_name}: {problems}")
+            done_n += 1
+            if not out:
+                log.append(f"FORMAT FAILED {company_name}: left out of Gmail until it works")
+                fstate[key] = {"ids": [], "hash": "", "failed": True}
+                continue
+            if "--format-preview" in sys.argv:
+                log.append(f"--- {company_name} -> {', '.join(r['to_email'] for r in keep)}\nSubject: {out[0]}\n{out[1]}")
+                continue
+            for r in keep:
+                await st.edit_outbox_draft(r["id"], out[0], out[1])
+            for r in extra:
+                await st.reject_outbox_item(r["id"])
+                log.append(f"3rd+ contact not used: {r['to_email']}")
+            fresh = [await st.get_outbox_item(i) for i in ids]
+            fstate[key] = {"ids": ids, "hash": fmt.group_hash([f for f in fresh if f])}
+            FORMAT_FILE.write_text(json.dumps(fstate, indent=1))
+            log.append(f"formatted: {company_name} ({len(keep)} people)")
+        if "--format-preview" in sys.argv:
+            print("\n".join(log)); return
+        pending = await rows(PENDING_SQL)
+        unformatted = {k for k, g in groups.items() if not fstate.get(k, {}).get("ids")}
+    else:
+        unformatted = set()
+
+    # 4. new drafts (a company's two first emails share one draft)
+    import gershon_h01_format as fmt
+    made, batches = [], {}
     for r in pending:
-        if r["id"] in tracked:
+        if r["id"] in tracked or dismissed.get(r["id"]) == content_hash(r["subject"], r["body"]):
             continue
+        if r["kind"] == "sequence" and int(r["step"] or 1) == 1:
+            if fmt.company_key(r) in unformatted:
+                continue  # not in the campaign format yet
+            bkey = ("s1", fmt.company_key(r), r["subject"], r["body"])
+        else:
+            bkey = ("one", r["id"])
+        batches.setdefault(bkey, []).append(r)
+    for bkey, grp in batches.items():
+        r = grp[0]
         thread, reply_to = r.get("thread_ref") or "", r.get("in_reply_to") or ""
         if r["kind"] == "sequence" and int(r["step"] or 1) > 1:
             prev = await st.get_previous_step(r)
@@ -259,21 +336,24 @@ async def main(dry=False):
         body = r["body"]
         if r["kind"] == "sequence" and footer and not body.rstrip().endswith(footer):
             body = body.rstrip() + "\n\n" + footer
-        label = f"{(r['fn'] + ' ' + r['ln']).strip() or r['to_email']}" + (f" — {r['company']}" if r["company"] else "")
+        names = ", ".join((x["fn"] + " " + x["ln"]).strip() or x["to_email"] for x in grp)
+        label = names + (f" — {r['company']}" if r["company"] else "")
         if dry:
             log.append(f"would draft: {label} | {r['subject']}")
             continue
-        res = await provider.send_email(r["to_email"], r["subject"], body, thread_ref=thread, in_reply_to=reply_to)
+        to = ", ".join(dict.fromkeys(x["to_email"] for x in grp))
+        res = await provider.send_email(to, r["subject"], body, thread_ref=thread, in_reply_to=reply_to)
         if not res.ok:
-            log.append(f"FAIL {r['to_email']}: {res.error}")
+            log.append(f"FAIL {to}: {res.error}")
             continue
-        tracked[r["id"]] = {"draft": provider.last.get("draft", ""), "thread": provider.last.get("thread", ""),
-                            "hash": content_hash(r["subject"], r["body"])}
-        STATE_FILE.write_text(json.dumps(tracked, indent=1))
+        for x in grp:
+            tracked[x["id"]] = {"draft": provider.last.get("draft", ""), "thread": provider.last.get("thread", ""),
+                                "hash": content_hash(x["subject"], x["body"])}
+        save()
         step = "reply" if r["kind"] == "reply" else f"email {r['step']}"
         made.append(f"- {label} ({step}): {r['subject']}")
 
-    # 4. one short notice when there is something new to look at
+    # 5. one short notice when there is something new to look at
     if made and not dry:
         sys.path.insert(0, str(ROOT / "scripts"))
         import gershon_reports as rep
@@ -283,13 +363,13 @@ async def main(dry=False):
                      f"{len(made)} new Harvey email(s) are in the Drafts folder of {MAILBOX}:\n"
                      f"{DRAFTS_LINK}\n\n" + "\n".join(made) +
                      "\n\nSend = approved (Harvey records it and schedules the follow-up)."
-                     "\nDelete = rejected. Edit freely before sending."
-                     f"\n\n{len(tracked)} Harvey draft(s) in Gmail now. Nothing is ever sent without you.")
+                     "\nDelete = that version is dropped (nothing is rejected). Edit freely before sending."
+                     "\nNothing is ever sent without you.")
         except Exception as e:  # noqa: BLE001
             log.append(f"notice email failed: {e}")
     if OLD_DONE.exists() and STATE_FILE.exists() and not dry:
         OLD_DONE.rename(OLD_DONE.with_suffix(".json.old"))
-    log.append(f"new drafts: {len(made)} | Harvey drafts in Gmail: {len(tracked)} | waiting in Harvey: {len(pending)}")
+    log.append(f"new drafts: {len(made)} | waiting in Harvey: {len(pending)}")
     print("\n".join(log))
 
 

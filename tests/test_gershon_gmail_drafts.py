@@ -22,7 +22,7 @@ def test_sent_from_gmail_is_recorded_as_sent():
 
 
 def test_deleted_in_gmail_is_rejected():
-    assert g.decide(ROW, ENTRY, False, None) == "mark_rejected"
+    assert g.decide(ROW, ENTRY, False, None) == "dismiss"
 
 
 def test_edited_in_harvey_replaces_the_draft():
