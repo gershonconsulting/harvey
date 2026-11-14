@@ -172,6 +172,7 @@ async def main(dry=False):
     from harvey.config import load_config, load_env
     from harvey.state import StateManager
     from harvey.agents.sender import compliance_footer_lines
+    from harvey.integrations.signature import with_signature
 
     cfg, env = load_config(), load_env()
     provider = make_draft_provider(cfg, env)
@@ -334,7 +335,8 @@ async def main(dry=False):
                 continue
             thread = thread or prev.get("thread_ref") or ""
             reply_to = reply_to or prev.get("message_id") or ""
-        body = r["body"]
+        # same order as Harvey's sender: text, then the sign-off/signature, then address + opt-out
+        body = with_signature(r["body"], cfg)
         if r["kind"] == "sequence" and footer and not body.rstrip().endswith(footer):
             body = body.rstrip() + "\n\n" + footer
         names = ", ".join((x["fn"] + " " + x["ln"]).strip() or x["to_email"] for x in grp)
