@@ -118,7 +118,7 @@ usage:
     timezone: Europe/London
 compliance:
   postal_address: Gershon Consulting LLC, 322 W 52nd Street, Suite 158, New York, NY 10019
-  opt_out_line: If this isn't a fit, just reply "no thanks" and I won't write again.
+  opt_out_line: If this is not a fit, just reply "no thanks" and I will not write again.
   do_not_contact: []
   precleared:
     enabled: false
