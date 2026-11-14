@@ -122,3 +122,11 @@ BEFORE ANY EMAIL GOES OUT (Olivier's decisions)
    One notice email per batch of new drafts with the Gmail link.
 ✅ gershon_reports.py: GMAIL_DRAFTS (default on) -> no full-text drafts email, no "N waiting" alert;
    daily report points to Gmail Drafts. GMAIL_DRAFTS=0 in .env restores the old emails.
+✅ 2026-11-14: Gmail sync live on the VPS (timer every 10 min, OnCalendar). Deleting a draft never rejects (only drops that version).
+✅ H01 campaign format (scripts/gershon_h01_format.py): one email per company to up to 2 people; 7 fixed parts. 12 emails rewritten
+   by Claude from Harvey's research + web-checked facts and put in Gmail Drafts; 5 leads kept out (4 US companies, 1 junk).
+❌ Codex login: last_refresh > 8 days -> Harvey's brain refuses calls ("expired or due for renewal"); harvey-codex-renew's
+   'codex exec' does not rewrite auth.json while the access token is still valid. Clears when the token expires (~19h after
+   2026-11-14 01:00 UTC) or with a device-code re-login. Until then Harvey writes no new emails.
+❌ Most companies have only a general inbox: Harvey's verifier marked the founders' guessed addresses invalid. 2 people per company
+   needs a real second contact (finder/enrichment).
