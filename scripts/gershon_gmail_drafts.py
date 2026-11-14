@@ -232,6 +232,7 @@ async def main(dry=False):
             continue
         log.append(f"{action}: {who}")
         if dry:
+            tracked.pop(oid)  # preview as if done; nothing is saved
             continue
         if action == "mark_sent":
             await st.update_outbox_item(oid, status="sent", sent_at=sent["sent_at"],
