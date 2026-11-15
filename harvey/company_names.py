@@ -50,9 +50,55 @@ _TRAILING_LEGAL = re.compile(
     r"|plc|s\.?a\.?r?\.?l?\.?|ug(?: \(haftungsbeschränkt\))?|co\.?|corp\.?|pvt\.?(?: ltd\.?)?)\s*$")
 
 
+# A fetched page that is a bot check or an error, not the site. Narrower than
+# _PLACEHOLDER on purpose: it decides that a FETCH failed, so ordinary titles
+# like "Home" or "Welcome" must never trip it.
+_BOT_CHECK_TITLE = re.compile(
+    r"(?i)(checking (?:if the site connection is secure|your browser)|just a moment"
+    r"|attention required|access denied|access to this page has been denied"
+    r"|verify (?:you are|that you are|you're) (?:a )?human|human verification"
+    r"|bot verification|are you (?:a )?(?:human|robot)|robot or human|captcha"
+    r"|ddos[- ]protection|ddos-guard|security check|one more step"
+    r"|please wait while we verify|please enable (?:javascript and )?cookies)")
+_ERROR_TITLE = re.compile(
+    r"(?i)^\W*(?:error\W+[45]\d\d\b|(?:error\W*)?(?:http\W*)?[45]\d\d(?:\W*$|\W+(?:error|forbidden|not found"
+    r"|unauthori[sz]ed|bad request|gone|internal|service|bad gateway|gateway|too many))"
+    r"|(?:page|site|file) not found"
+    r"|not found\b|forbidden\b|bad gateway|service (?:temporarily )?unavailable"
+    r"|internal server error|gateway time-?out|too many requests)")
+_TITLE_TAG = re.compile(r"(?is)<title[^>]*>(.*?)</title>")
+
+
+def page_title(html: str) -> str:
+    """The text of a page's first <title>, whitespace collapsed ("" if none)."""
+    m = _TITLE_TAG.search((html or "")[:20000])
+    return re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
+
+
+def interstitial_kind(title: str) -> str:
+    """"bot_check" for an anti-bot page ("Checking your browser", "Just a
+    moment...", "Attention Required! | Cloudflare"), "error" for an error page
+    ("403 Forbidden", "404 Not Found", "Page not found"), else "". A page with
+    such a title was not a successful fetch, and its title is never a name."""
+    title = (title or "").strip()
+    if not title:
+        return ""
+    if _BOT_CHECK_TITLE.search(title):
+        return "bot_check"
+    if _ERROR_TITLE.search(title):
+        return "error"
+    return ""
+
+
+def is_interstitial_title(title: str) -> bool:
+    """True when ``title`` is a bot-check or error page, not a business site."""
+    return bool(interstitial_kind(title))
+
+
 def is_placeholder_name(name: str) -> bool:
     """True when ``name`` is a page state (bot check, error, parked domain)."""
-    return bool(_PLACEHOLDER.search((name or "").strip()))
+    name = (name or "").strip()
+    return bool(_PLACEHOLDER.search(name)) or is_interstitial_title(name)
 
 
 def clean_company_name(name: str) -> str:

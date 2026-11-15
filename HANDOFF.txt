@@ -17,6 +17,12 @@ SALES.GERSHON.AI LINK (2026-11-11) — Olivier: "I have no idea where Harvey's l
    SALES_INGEST_TOKEN (random) to /opt/harvey/.env, put its SHA-256 in sales D1
    (harvey_meta k='ingest_sha256'), systemctl enable --now harvey-sales-sync.timer
 
+2026-11-15 BOT-CHECK GUARD (branch nightly/2026-11-15-harvey-botcheck-guard, v0.3.1): a homepage titled
+   "Checking your browser" / "Just a moment" / "404 Not Found" etc. is never a company name (company_names
+   interstitial_kind; Writer sets such leads 'unfit'). Tests: tests/test_interstitial_guard.py.
+   ❌ Scout wiring (skip the company, retry next cycle) not pushed yet: scout.py too big for the connector.
+   ❌ Needs deploying to /opt/harvey; Ariel: discard the drafts already written for "Checking your browser".
+
 2026-11-13 ALERT NOISE (branch nightly/2026-11-13-harvey-alert-once): scripts/gershon_reports.py -
    "N emails waiting for approval" alert now at most once per UTC day unless N grows past the last N
    sent (state: waiting_sent_date / waiting_sent_n in data/gershon_alerts.json); red-cross prefix only
