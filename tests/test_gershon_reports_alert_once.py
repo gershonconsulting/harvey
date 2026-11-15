@@ -119,9 +119,4 @@ def test_info_alert_has_no_red_cross(tmp_path, monkeypatch):
     assert len(sent) == 1 and sent[0].startswith("ℹ️") and "❌" not in sent[0]
 
 
-def test_daily_flag(tmp_path, monkeypatch):
-    for name, n, ok, mark in (("a", 5, True, "ℹ️"), ("b", 5, False, "❌"), ("c", 0, True, "✅")):
-        mod, sent = setup(tmp_path / name, monkeypatch, n, {}, brain_ok=ok, mode="daily") \
-            if (tmp_path / name).mkdir() is None else (None, None)
-        mod.main()
-        assert sent[0].startswith(mark), (name, sent)
+# The daily report moved to scripts/gershon_daily.py: see tests/test_gershon_daily.py

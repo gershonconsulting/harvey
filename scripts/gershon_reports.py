@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gershon add-on: email Harvey reports and alerts through Resend.
 
-  gershon_reports.py daily   -> full daily report (always sends)
+  gershon_reports.py daily   -> the daily report (scripts/gershon_daily.py, always sends)
   gershon_reports.py alerts  -> sends only when something changed that Olivier
                                 needs to know (service down, brain not ready,
                                 emails waiting for approval, new replies,
@@ -266,15 +266,14 @@ def fmt(s, env=None):
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "daily"
+    if mode == "daily":
+        # the daily report is its own script now (one readable email, HTML + text)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import gershon_daily
+        sys.exit(gershon_daily.main([]))
     env = load_env()
     s = snapshot()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    if mode == "daily":
-        # red cross only for real failures; waiting drafts are information, not a fault
-        flag = ("❌" if (s["service"] != "active" or not s["brain_ready"])
-                else "ℹ️" if s["pending_review"] else "✅")
-        send(env, f"{flag} GC Harvey daily report {today}", fmt(s, env))
-        return
     if mode == "test-lead":
         send_lead(env, ("test", "interested", "presenting", json.dumps([{"sender": "prospect",
                   "content": "Sounds interesting — can we talk next week?"}]), "now",
