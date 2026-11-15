@@ -1,27 +1,30 @@
-# Harvey (Gershon) — STATUS
+# STATUS - harvey (Gershon cold-email agent)
+Updated: 2026-11-15
 
-Last updated: 2026-11-11
+## State
+- Harvey is PAUSED on purpose and runs on a VPS (/opt/harvey). Nothing here is deployed by merge.
+- main includes PR #7 (no double sign-off on old drafts) and PR #8 (alert "N waiting" at most once per UTC day,
+  red cross only for real failures).
+- Full test suite on merged main: 3021 passed, 26 skipped (local run, 2026-11-14).
+- Known baseline: the two windows-latest CI jobs fail on main too (test_unusable_html_signature_holds_sending:
+  "environment variable is longer than 32767 characters"). Not caused by #7/#8.
+- 2026-11-15: branch nightly/2026-11-15-harvey-botcheck-guard (v0.3.1) - bot-check / error page titles
+  ("Checking your browser", "404 Not Found") are never a company name. Scout wiring still to push.
 
-Harvey = autonomous cold-email agent on the Hostinger VPS srv1511567.hstgr.cloud (/opt/harvey).
-Every email waits for Olivier's approval; nothing has been sent to prospects yet.
-Full history and commands: HANDOFF.txt.
+## Deploy route
+- VPS only: git pull in /opt/harvey, restart the Harvey service and the report timers. Do not edit its .env here.
 
-## Done ✅
-- Installed on the VPS as systemd service `harvey`; brain = ChatGPT/Codex (renew login ~8 days).
-- Reports/alerts by email (scripts/gershon_reports.py, Resend): daily 08:00 + 15-min alerts.
-- Email verification keys (MillionVerifier, ZeroBounce) on the VPS.
-- PRs #1, #2 merged.
+## Done
+- [x] #7, #8 merged.
+- [x] #9 merged 2026-11-15: review in Gmail Drafts (two-way sync timer, not deployed).
+- [x] #4 merged 2026-11-15: Streak "GC Campaigns" sync (Origin H01) + reply alert counts real prospect replies only.
+  Runs only once STREAK_API_KEY is in /opt/harvey/.env (not set; Olivier's OK). Try `gershon_streak.py dry-run` first.
 
-## Open ❌
-- Not yet deployed to the VPS: new-lead email, full drafts by email, CC01 email rules,
-  and the Streak GC Campaigns sync below. Deploy route: hPanel > VPS > Web console.
-- Streak sync (branch gershon/streak-h01-sync): Harvey's leads -> Streak "GC Campaigns",
-  Origin H01, deduped. Needs STREAK_API_KEY in /opt/harvey/.env + deploy (Olivier's OK).
-- Reply alert fixed in the same branch: it counted inbox newsletters as "prospect replies".
-- No sending mailbox yet (separate domain + warmup), Olivier to decide.
-- traefik container crash-loops; linalysis container restart-loops (CPU warning).
-
-## Known issues
-- 31 drafts in pending_review were written to the old rules: reject and let Harvey rewrite.
-- Leads in Streak by hand (2026-11-11): GoodCore, The Munro Agency (fit); iCreativez,
-  RevenueBase, Techreviewer (poor fit / unverified).
+## Open
+- [ ] VPS pull + restart (not done; needs access to the VPS).
+- [ ] Discard the drafts already written for "Checking your browser" on the VPS (Ariel).
+- [ ] Codex (ChatGPT) re-login on the VPS: brain is not ready until then.
+- [ ] Check REPORT_TO / DRAFTS_TO / LEAD_TO in the VPS .env (typo address "harvery@" is not in the repo).
+- [ ] PR #3 (private review web page) left open: overlaps #9 (Gmail Drafts review); Olivier to choose.
+- [ ] First alerts run after the VPS pull may report existing prospect replies once (state key renamed replies_total -> prospect_replies).
+- [ ] Windows CI failure on main (test uses an env var over the Windows limit).

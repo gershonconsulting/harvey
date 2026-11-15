@@ -220,8 +220,13 @@ class SignatureConfig(BaseModel):
     # Harvey sends (cold and replies), above the postal address and opt-out
     # line. Works with or without a logo, and with every native provider.
     text: str = ""
+    # Optional: your real HTML email signature, as a file (relative to the
+    # project folder, or absolute). When set, every email goes out as HTML
+    # and this block replaces ``text`` in the HTML part; ``text`` stays the
+    # plain-text alternative. Works with or without a logo.
+    html: str = ""
 
-    @field_validator("logo", "alt", "link", mode="before")
+    @field_validator("logo", "alt", "link", "html", mode="before")
     @classmethod
     def _blank_is_empty(cls, v):
         return "" if v is None else str(v).strip()
@@ -288,6 +293,9 @@ class EmailChannelConfig(BaseModel):
     send_window: SendWindowConfig | None = None
     # A logo under every email (see SignatureConfig). Native providers only.
     signature: SignatureConfig = SignatureConfig()
+    # Blind copy of every email Harvey sends (cold and replies) to these
+    # addresses, e.g. a team mailbox that keeps a record. Native providers only.
+    bcc: list[str] = []
 
     @field_validator("warmup", mode="before")
     @classmethod
@@ -298,6 +306,23 @@ class EmailChannelConfig(BaseModel):
     @classmethod
     def _blank_signature(cls, v):
         return SignatureConfig() if v is None else v
+
+    @field_validator("bcc", mode="before")
+    @classmethod
+    def _bcc_addresses(cls, v):
+        if v is None or v == "":
+            return []
+        items = [v] if isinstance(v, str) else list(v)
+        out = []
+        for a in items:
+            a = str(a).strip().lower()
+            if not a:
+                continue
+            if not re.match(r"^[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+$", a):
+                raise ValueError(f"channels.email.bcc: '{a}' is not an email address.")
+            if a not in out:
+                out.append(a)
+        return out
 
     @field_validator("max_daily_sends")
     @classmethod

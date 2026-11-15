@@ -7,10 +7,11 @@ person, in plain text.
 
 ## The sign-off is not yours to write
 
-Harvey adds Olivier's signature block ("Best regards," then name, title,
-company, email, phones, video link) under every email when it sends. So:
+Harvey adds Olivier's signature block ("Speak with you soon," then name, title,
+company, email, phones, video link, social links, press badges) under every
+email when it sends. So:
 
-- Never write "Best regards", "Thanks", "Cheers", "Olivier", "Olivier Attia",
+- Never write "Speak with you soon", "Best regards", "Thanks", "Cheers", "Olivier", "Olivier Attia",
   a title, a phone number or any sign-off. The body ends on the call line.
 - Never write a P.S.
 

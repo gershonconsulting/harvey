@@ -1,0 +1,10 @@
+[Unit]
+Description=Harvey -> Gmail Drafts of olivier@gershonconsulting.net (review place, never sends)
+After=network-online.target harvey.service
+
+[Service]
+Type=oneshot
+User=harvey
+WorkingDirectory=/opt/harvey
+ExecStart=/opt/harvey/.venv/bin/python /opt/harvey/scripts/gershon_gmail_drafts.py
+TimeoutStartSec=300
