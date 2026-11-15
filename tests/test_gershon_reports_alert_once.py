@@ -46,7 +46,7 @@ def setup(tmp_path, monkeypatch, n, state, brain_ok=True, mode="alerts"):
         add_pending(con, i)
     con.commit()
     con.close()
-    base = {"service": "active", "brain_ready": True, "pending_review": 0, "replies_total": 0,
+    base = {"service": "active", "brain_ready": True, "pending_review": 0, "prospect_replies": 0, "inbox_checked": 0,
             "errors": [], "leads_notified": [], "drafts_notified": [f"o{i}" for i in range(n)]}
     base.update(state)
     mod.STATE.write_text(json.dumps(base))
@@ -112,7 +112,9 @@ def test_brain_failure_gets_red_cross(tmp_path, monkeypatch):
 def test_info_alert_has_no_red_cross(tmp_path, monkeypatch):
     mod, sent = setup(tmp_path, monkeypatch, 0, {})
     con = sqlite3.connect(mod.DB)
-    con.execute("INSERT INTO processed_replies VALUES ('r1')")
+    # a real prospect reply (inbox messages alone no longer count, see PR #4)
+    con.execute("INSERT INTO conversations VALUES ('v1','p1','question','initial_outreach',?,'open','')",
+                (json.dumps([{"sender": "prospect", "content": "tell me more"}]),))
     con.commit()
     con.close()
     mod.main()

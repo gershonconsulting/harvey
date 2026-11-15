@@ -93,7 +93,7 @@ def test_with_gmail_review_no_draft_email_and_no_waiting_alert(tmp_path, monkeyp
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     assert mod.gmail_review({}) and not mod.gmail_review({"GMAIL_DRAFTS": "0"})
     s = {"pending_review": 3, "service": "active", "brain_ready": True, "sent_24h": 0,
-         "open_conversations": 0, "replies_total": 0, "outbox": {}, "prospects": {},
+         "open_conversations": 0, "prospect_replies": 0, "inbox_checked": 0, "outbox": {}, "prospects": {},
          "errors": [], "status_text": ""}
     assert mod.GMAIL_DRAFTS_LINK in mod.fmt(s, {})
     assert mod.GMAIL_DRAFTS_LINK not in mod.fmt(s, {"GMAIL_DRAFTS": "0"})

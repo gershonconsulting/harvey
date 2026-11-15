@@ -1,5 +1,5 @@
 # STATUS - harvey (Gershon cold-email agent)
-Updated: 2026-11-15 (night push)
+Updated: 2026-11-15
 
 ## State
 - Harvey is PAUSED on purpose and runs on a VPS (/opt/harvey). Nothing here is deployed by merge.
@@ -16,11 +16,15 @@ Updated: 2026-11-15 (night push)
 
 ## Done
 - [x] #7, #8 merged.
+- [x] #9 merged 2026-11-15: review in Gmail Drafts (two-way sync timer, not deployed).
+- [x] #4 merged 2026-11-15: Streak "GC Campaigns" sync (Origin H01) + reply alert counts real prospect replies only.
+  Runs only once STREAK_API_KEY is in /opt/harvey/.env (not set; Olivier's OK). Try `gershon_streak.py dry-run` first.
 
 ## Open
 - [ ] VPS pull + restart (not done; needs access to the VPS).
 - [ ] Discard the drafts already written for "Checking your browser" on the VPS (Ariel).
 - [ ] Codex (ChatGPT) re-login on the VPS: brain is not ready until then.
 - [ ] Check REPORT_TO / DRAFTS_TO / LEAD_TO in the VPS .env (typo address "harvery@" is not in the repo).
-- [ ] PRs #3, #4, #9 left open on purpose (they change what Harvey sends/reads).
+- [ ] PR #3 (private review web page) left open: overlaps #9 (Gmail Drafts review); Olivier to choose.
+- [ ] First alerts run after the VPS pull may report existing prospect replies once (state key renamed replies_total -> prospect_replies).
 - [ ] Windows CI failure on main (test uses an env var over the Windows limit).
