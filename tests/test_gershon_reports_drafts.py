@@ -50,7 +50,7 @@ def test_drafts_emailed_in_full_once(tmp_path, monkeypatch):
     sent = []
     monkeypatch.setattr(mod, "send", lambda env, subj, text: sent.append((subj, text)) or True)
     monkeypatch.setattr(mod, "sh", lambda cmd, timeout=120: "active")
-    monkeypatch.setattr(mod, "load_env", lambda: {})
+    monkeypatch.setattr(mod, "load_env", lambda: {"GMAIL_DRAFTS": "0"})
     monkeypatch.setattr(mod.sys, "argv", ["x", "alerts"])
 
     mod.main()
@@ -77,9 +77,23 @@ def test_drafts_mode_sends_all_waiting(tmp_path, monkeypatch):
     sent = []
     monkeypatch.setattr(mod, "send", lambda env, subj, text: sent.append((subj, text)) or True)
     monkeypatch.setattr(mod, "sh", lambda cmd, timeout=120: "active")
-    monkeypatch.setattr(mod, "load_env", lambda: {})
+    monkeypatch.setattr(mod, "load_env", lambda: {"GMAIL_DRAFTS": "0"})
     monkeypatch.setattr(mod.sys, "argv", ["x", "drafts"])
     mod.main()
     assert len(sent) == 1
     assert "3 waiting draft(s)" in sent[0][0]
     assert "DRAFT 3 of 3" in sent[0][1] and "B2" in sent[0][1]
+
+
+def test_with_gmail_review_no_draft_email_and_no_waiting_alert(tmp_path, monkeypatch):
+    """Default: review happens in Gmail Drafts, so the alerts run sends neither."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "gr", Path(__file__).parent.parent / "scripts" / "gershon_reports.py")
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    assert mod.gmail_review({}) and not mod.gmail_review({"GMAIL_DRAFTS": "0"})
+    s = {"pending_review": 3, "service": "active", "brain_ready": True, "sent_24h": 0,
+         "open_conversations": 0, "replies_total": 0, "outbox": {}, "prospects": {},
+         "errors": [], "status_text": ""}
+    assert mod.GMAIL_DRAFTS_LINK in mod.fmt(s, {})
+    assert mod.GMAIL_DRAFTS_LINK not in mod.fmt(s, {"GMAIL_DRAFTS": "0"})
