@@ -8,8 +8,8 @@ Updated: 2026-11-15 (night push)
 - Full test suite on merged main: 3021 passed, 26 skipped (local run, 2026-11-14).
 - Known baseline: the two windows-latest CI jobs fail on main too (test_unusable_html_signature_holds_sending:
   "environment variable is longer than 32767 characters"). Not caused by #7/#8.
-- 2026-11-15: branch nightly/2026-11-15-harvey-botcheck-guard (v0.3.1) - bot-check / error pages
-  ("Checking your browser", "404 Not Found") are a failed fetch, never a company or prospect.
+- 2026-11-15: branch nightly/2026-11-15-harvey-botcheck-guard (v0.3.1) - bot-check / error page titles
+  ("Checking your browser", "404 Not Found") are never a company name. Scout wiring still to push.
 
 ## Deploy route
 - VPS only: git pull in /opt/harvey, restart the Harvey service and the report timers. Do not edit its .env here.
