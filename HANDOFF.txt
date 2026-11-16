@@ -17,6 +17,17 @@ SALES.GERSHON.AI LINK (2026-11-11) — Olivier: "I have no idea where Harvey's l
    SALES_INGEST_TOKEN (random) to /opt/harvey/.env, put its SHA-256 in sales D1
    (harvey_meta k='ingest_sha256'), systemctl enable --now harvey-sales-sync.timer
 
+2026-11-16 DAILY REPORT V2 (branch nightly/2026-11-16-harvey-daily-v2, v0.3.2; replaces PR #10, whose base
+   branch was already squash-merged): scripts/gershon_daily.py sends ONE readable daily email (HTML + text:
+   verdict vs target, new companies, drafts to review in Gmail, interested leads, problems in plain words)
+   instead of the old raw "daily report" + "daily stats". gershon_reports.py daily now hands off to it.
+   Rebased on main (keeps prospect_replies from #4). Tests: tests/test_gershon_daily.py; full suite
+   3072 passed, 26 skipped.
+   ✅ Code + tests on the branch, PR open into main.
+   ❌ Needs deploying to /opt/harvey (VPS: git pull + restart timers) - merge does not make it live.
+   ❌ Check on the VPS that the "harvey-loop" unit name gershon_daily probes exists (else the report
+      says "prospecting is stopped").
+
 2026-11-15 BOT-CHECK GUARD (branch nightly/2026-11-15-harvey-botcheck-guard, v0.3.1): a homepage titled
    "Checking your browser" / "Just a moment" / "404 Not Found" etc. is never a company name (company_names
    interstitial_kind; Writer sets such leads 'unfit'). Tests: tests/test_interstitial_guard.py.

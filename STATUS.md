@@ -1,5 +1,5 @@
 # STATUS - harvey (Gershon cold-email agent)
-Updated: 2026-11-15
+Updated: 2026-11-16
 
 ## State
 - Harvey is PAUSED on purpose and runs on a VPS (/opt/harvey). Nothing here is deployed by merge.
@@ -10,6 +10,8 @@ Updated: 2026-11-15
   "environment variable is longer than 32767 characters"). Not caused by #7/#8.
 - 2026-11-15: branch nightly/2026-11-15-harvey-botcheck-guard (v0.3.1) - bot-check / error page titles
   ("Checking your browser", "404 Not Found") are never a company name. Scout wiring still to push.
+- 2026-11-16: branch nightly/2026-11-16-harvey-daily-v2 (v0.3.2) - daily report v2 (one readable email,
+  scripts/gershon_daily.py), rebased on main; replaces PR #10. Full suite 3072 passed, 26 skipped.
 
 ## Deploy route
 - VPS only: git pull in /opt/harvey, restart the Harvey service and the report timers. Do not edit its .env here.
@@ -22,6 +24,7 @@ Updated: 2026-11-15
 
 ## Open
 - [ ] VPS pull + restart (not done; needs access to the VPS).
+- [ ] Daily report v2 PR: merge, then VPS pull; check the "harvey-loop" unit exists; close #10.
 - [ ] Discard the drafts already written for "Checking your browser" on the VPS (Ariel).
 - [ ] Codex (ChatGPT) re-login on the VPS: brain is not ready until then.
 - [ ] Check REPORT_TO / DRAFTS_TO / LEAD_TO in the VPS .env (typo address "harvery@" is not in the repo).
