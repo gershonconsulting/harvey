@@ -122,3 +122,34 @@ def test_info_alert_has_no_red_cross(tmp_path, monkeypatch):
 
 
 # The daily report moved to scripts/gershon_daily.py: see tests/test_gershon_daily.py
+
+
+def test_reply_alert_names_who_and_quotes_message(tmp_path, monkeypatch):
+    mod, sent = setup(tmp_path, monkeypatch, 0, {"replies_notified": []})
+    bodies = []
+    monkeypatch.setattr(mod, "send", lambda env, subj, text: sent.append(subj) or bodies.append(text) or True)
+    con = sqlite3.connect(mod.DB)
+    con.execute("INSERT INTO conversations VALUES ('v1','p1','question','initial_outreach',?,'open','')",
+                (json.dumps([{"sender": "harvey", "content": "hi"},
+                             {"sender": "prospect", "content": "Sounds good, call me Tuesday"}]),))
+    con.commit()
+    con.close()
+    mod.main()
+    assert len(sent) == 1 and "Anna Berg (Acme) has a question" in sent[0]
+    assert "Sounds good, call me Tuesday" in bodies[0] and "anna@acme.de" in bodies[0]
+    assert "Outbox by status" not in bodies[0] and "status --check" not in bodies[0]
+    sent.clear()
+    mod.main()          # same reply never announced twice
+    assert sent == []
+
+
+def test_risky_hold_is_not_an_error_alert(tmp_path, monkeypatch):
+    mod, sent = setup(tmp_path, monkeypatch, 0, {})
+    con = sqlite3.connect(mod.DB)
+    con.execute("INSERT INTO outbox (id, prospect_id, to_email, subject, body, step, kind, status, error,"
+                " updated_at) VALUES ('x','p1','a@zed.dev','s','b',1,'sequence','failed',"
+                "'gate: email_status ''risky'' is not deliverable','2026-11-11')")
+    con.commit()
+    con.close()
+    mod.main()
+    assert sent == []

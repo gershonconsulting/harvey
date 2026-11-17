@@ -277,6 +277,58 @@ def fmt(s, env=None):
     return "\n".join(lines)
 
 
+SALES_LINK = "https://sales.gershon.ai/#harvey"
+
+
+def reply_threads():
+    """Conversations where the prospect actually wrote, with who they are and what they said."""
+    rows = q("""SELECT c.id, c.intent, c.thread_json,
+                       p.first_name, p.last_name, p.title, p.email,
+                       COALESCE(NULLIF(p.company, ''), co.name, '')
+                FROM conversations c
+                LEFT JOIN prospects p ON p.id = c.prospect_id
+                LEFT JOIN companies co ON co.id = p.company_id
+                ORDER BY c.updated_at""")
+    return [r for r in rows if prospect_wrote(r[2])]
+
+
+INTENT_WORDS = {
+    "interested": "is interested",
+    "question": "has a question",
+    "objection": "pushed back",
+    "not_interested": "said no",
+    "unsubscribe": "asked to stop",
+    "out_of_office": "is out of office (auto-reply)",
+    "referral": "pointed you to someone else",
+}
+
+
+def plain_problem(err):
+    e = (err or "").lower()
+    if "risky" in e or "not deliverable" in e or "invalid" in e:
+        return "address not confirmed as real, so Harvey held it back (nothing to do)"
+    if "quota" in e or "limit" in e:
+        return "daily sending limit reached"
+    if "auth" in e or "token" in e or "401" in e or "403" in e:
+        return "Gmail connection refused"
+    return (err or "no reason given")[:120]
+
+
+def alert_body(headline, details, s):
+    """Short, readable alert: what happened, what to do, where things stand. No raw dumps."""
+    out = [headline, ""]
+    out += details
+    out += ["", "Where things stand"]
+    if s["pending_review"]:
+        out.append(f"- {s['pending_review']} emails waiting for you in Gmail Drafts: {GMAIL_DRAFTS_LINK}")
+    out.append(f"- Emails sent in the last 24h: {s['sent_24h']}")
+    out.append(f"- Harvey: {'running' if s['service'] == 'active' else s['service'].upper()}"
+               f" · ChatGPT login: {'OK' if s['brain_ready'] else 'EXPIRED'}")
+    out += ["", f"Full campaign view: {SALES_LINK}",
+            "The daily report (8:00) has the details and the 10-companies/day target."]
+    return "\n".join(out)
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "daily"
     if mode == "daily":
@@ -329,12 +381,38 @@ def main():
             and waiting_alert_due(s["pending_review"], prev.get("pending_review", 0), prev, today)):
         alerts.append((False, f"{s['pending_review']} email(s) are waiting for your approval."))
         waiting_sent = True
-    if s["prospect_replies"] > prev.get("prospect_replies", 0):
-        alerts.append((False, f"{s['prospect_replies'] - prev.get('prospect_replies', 0)} new prospect reply(ies)."))
+    threads = reply_threads()
+    if "replies_notified" in prev:
+        replied = set(prev["replies_notified"])
+    else:
+        # first run of this version: older replies were already announced by count
+        replied = {t[0] for t in threads} if s["prospect_replies"] <= prev.get("prospect_replies", 0) else set()
+    details = []
+    for cid, intent, thread, first, last, title, email, company in threads:
+        if cid in replied:
+            continue
+        replied.add(cid)
+        if cid in seen:  # already got its own "New lead" email: one email per event
+            continue
+        name = f"{first or ''} {last or ''}".strip() or email or "A prospect"
+        who = name + (f", {title}" if title else "") + (f" at {company}" if company else "")
+        msg = " ".join(last_inbound(thread).split())
+        what = INTENT_WORDS.get(intent or "", "replied")
+        alerts.append((False, f"{name}" + (f" ({company})" if company else "") + f" {what}"))
+        details += [f"{who} {what}:", f'  "{msg[:600]}"' if msg else "  (message not available)",
+                    f"  Email: {email or '-'}", ""]
+    if details:
+        details.append("Answer from olivier@gershonconsulting.net "
+                       "(Harvey drafts a reply in Gmail Drafts when it can).")
     new_err = [e for e in s["errors"] if e not in prev.get("errors", [])]
     if new_err and prev:
-        alerts.append((True, f"{len(new_err)} new send error(s): " + "; ".join(e[2] for e in new_err)))
+        real = [e for e in new_err if "risky" not in (e[2] or "").lower()
+                and "not deliverable" not in (e[2] or "").lower()]
+        if real:  # held-back risky addresses are Harvey working as intended, not news
+            alerts.append((True, f"{len(real)} email(s) failed to send"))
+            details += [f"- {e[0]}: {plain_problem(e[2])}" for e in real]
     state = {k: s[k] for k in ("service", "brain_ready", "pending_review", "prospect_replies", "errors")}
+    state["replies_notified"] = sorted(replied)
     state["leads_notified"] = sorted(seen)
     # keep only ids still pending, so the state file does not grow forever
     state["drafts_notified"] = sorted(drafts_seen & still_pending)
@@ -345,8 +423,9 @@ def main():
         failure = any(f for f, _ in alerts)
         texts = [t for _, t in alerts]
         try:
-            send(env, ("❌" if failure else "ℹ️") + " GC Harvey: " + texts[0][:80],
-                 "\n".join(texts) + "\n\n" + fmt(s))
+            head = texts[0] if len(texts) == 1 else f"{texts[0]} (+{len(texts) - 1} more)"
+            send(env, ("❌" if failure else "ℹ️") + " Harvey H01: " + head[:90],
+                 alert_body("\n".join(f"• {t}" for t in texts), details, s))
             if waiting_sent:
                 if state["waiting_sent_date"] != today:
                     state["waiting_sent_n"] = 0
