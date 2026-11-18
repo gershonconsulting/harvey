@@ -17,6 +17,16 @@ SALES.GERSHON.AI LINK (2026-11-11) — Olivier: "I have no idea where Harvey's l
    SALES_INGEST_TOKEN (random) to /opt/harvey/.env, put its SHA-256 in sales D1
    (harvey_meta k='ingest_sha256'), systemctl enable --now harvey-sales-sync.timer
 
+2026-11-18 NIGHTLY: ALERTS V2 (PR #13, branch gershon/alerts-v2) merged into main by the nightly push
+   (auto-merge rule: internal alert email to REPORT_TO only - layout/content). Reply alert names who replied
+   (name, title, company, intent) and quotes their message; one email per event (interested replies only get
+   the New lead email); risky addresses held back by the gate no longer raise error alerts; short status
+   block + Gmail Drafts / sales.gershon.ai links instead of the raw dump.
+   ✅ Tests: full suite 3074 passed, 26 skipped (local Linux run); CI ubuntu + macOS green. CI windows legs
+      fail, as they already did on main (PR #12) - not caused by this change.
+   ❌ Not live: needs deploying to /opt/harvey (VPS: git pull + restart harvey-alerts.timer) - merge does not
+      make it live.
+
 2026-11-16 DAILY REPORT V2 (branch nightly/2026-11-16-harvey-daily-v2, v0.3.2; replaces PR #10, whose base
    branch was already squash-merged): scripts/gershon_daily.py sends ONE readable daily email (HTML + text:
    verdict vs target, new companies, drafts to review in Gmail, interested leads, problems in plain words)

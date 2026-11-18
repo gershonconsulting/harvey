@@ -156,5 +156,5 @@ def test_alert_counts_real_prospect_replies_not_inbox(tmp_path, monkeypatch):
     con.commit()
     con.close()
     rep.main()
-    assert len(sent) == 1 and "1 new prospect reply" in sent[0][0]
-    assert "Inbox messages checked" in sent[0][1]
+    assert len(sent) == 1 and "Ana Ruiz (NewCo) has a question" in sent[0][0]
+    assert "tell me more" in sent[0][1] and "Inbox messages checked" not in sent[0][1]
