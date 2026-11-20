@@ -102,9 +102,23 @@ def person_rank(row):
     return (1 if is_inbox(row) else 0, rank, verified, row.get("created_at") or "")
 
 
+CEO_TIER = 8  # first 8 TITLE_RANK entries: ceo .. geschäftsführer
+
+
+def is_ceo(row):
+    title = (row.get("title") or "").lower()
+    return any(t in title for t in TITLE_RANK[:CEO_TIER])
+
+
 def choose_two(rows):
-    """The (at most) two contacts to write to, and the rest."""
-    ordered = sorted(rows, key=person_rank)
+    """The two contacts to write to (the CEO + one more named person), and the rest.
+
+    Olivier's rule: a company's first email goes to the CEO and a +1, never to
+    a general inbox (contact@, info@, sales@ ...). If the company has no named
+    CEO-level contact plus a second named person, keep is empty: the company is
+    held until those contacts are found, and nothing is written to the inbox.
+    """
+    ordered = sorted((r for r in rows if not is_inbox(r)), key=person_rank)
     seen, keep = set(), []
     for r in ordered:
         addr = r["to_email"].lower()
@@ -113,8 +127,18 @@ def choose_two(rows):
         seen.add(addr)
         if len(keep) < 2:
             keep.append(r)
+    if len(keep) < 2 or not is_ceo(keep[0]):
+        keep = []
     keep_ids = {r["id"] for r in keep}
     return keep, [r for r in rows if r["id"] not in keep_ids]
+
+
+def missing_contacts(rows):
+    """Why choose_two held a company, in plain words."""
+    named = [r for r in rows if not is_inbox(r)]
+    if not any(is_ceo(r) for r in named):
+        return "no named CEO"
+    return "no +1 next to the CEO"
 
 
 def greeting(keep, company):
