@@ -270,6 +270,13 @@ async def main(dry=False):
         done_n = 0
         for key, grp in groups.items():
             keep, extra = fmt.choose_two(grp)
+            if not keep:
+                # CEO + 1 rule: never a general inbox; hold the company until both are found
+                held = clean_company_name(grp[0]["company"] or grp[0]["to_email"].split("@")[-1])
+                log.append(f"HELD {held}: {fmt.missing_contacts(grp)} (CEO + 1 rule; "
+                           f"not written to {', '.join(r['to_email'] for r in grp)})")
+                fstate[key] = {"ids": [], "hash": "", "held": True}
+                continue
             ids = sorted(r["id"] for r in keep)
             if fstate.get(key, {}).get("ids") == ids and fstate[key].get("hash") == fmt.group_hash(keep):
                 continue  # already in the campaign format
