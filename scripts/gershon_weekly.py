@@ -117,7 +117,7 @@ def collect(env, now=None, probe=True):
         "companies": per_day("companies"),
         "contacts": per_day("prospects"),
         "written": per_day("outbox", where="step = 1 AND kind = 'sequence'"),
-        "sent": per_day("outbox", "sent_at", "status = 'sent'"),
+        "sent": per_day("outbox", "sent_at", "status = 'sent' AND step = 1"),
         "replies": per_day("conversations"),
     }
 
@@ -182,9 +182,6 @@ def collect(env, now=None, probe=True):
         ("Companies found", one("SELECT COUNT(*) FROM companies")),
         ("With a contact", one(
             "SELECT COUNT(DISTINCT company_id) FROM prospects WHERE company_id != ''")),
-        ("Email confirmed", one(
-            "SELECT COUNT(DISTINCT company_id) FROM prospects "
-            "WHERE company_id != '' AND email_status IN ('verified', 'risky')")),
         ("Email written", one(
             "SELECT COUNT(DISTINCT p.company_id) FROM outbox o JOIN prospects p "
             "ON p.id = o.prospect_id WHERE o.step = 1 "
@@ -276,12 +273,13 @@ def chart_daily(d):
         "data": {"labels": labels, "datasets": [
             {"type": "line", "label": f"Target ({d['daily_target']}/day)",
              "data": [d["daily_target"]] * 7, "borderColor": INK, "borderDash": [6, 4],
-             "borderWidth": 2, "fill": False, "pointRadius": 0},
+             "borderWidth": 2, "fill": False, "pointRadius": 0,
+             "datalabels": {"display": False}},
             {"label": "New companies", "data": vals,
              "backgroundColor": [GREEN if v >= d["daily_target"] else RED for v in vals]},
         ]},
         "options": {"legend": {"position": "bottom", "labels": {"fontColor": MUTED}},
-                    "scales": _axes(),
+                    "layout": {"padding": {"top": 22}}, "scales": _axes(),
                     "plugins": {"datalabels": {"anchor": "end", "align": "top",
                                                "color": INK, "font": {"weight": "bold"}}}},
     })
@@ -292,7 +290,7 @@ def chart_trend(d):
     return chart_url({
         "type": "bar",
         "data": {"labels": labels, "datasets": [
-            {"type": "line", "label": "Emails sent", "data": [w["sent"] for w in d["weeks"]],
+            {"type": "line", "label": "First emails sent", "data": [w["sent"] for w in d["weeks"]],
              "borderColor": INK, "backgroundColor": INK, "fill": False, "borderWidth": 3,
              "pointRadius": 4, "lineTension": 0.3},
             {"label": "Companies found", "data": [w["companies"] for w in d["weeks"]],
@@ -304,12 +302,13 @@ def chart_trend(d):
 
 
 def chart_funnel(d):
-    shades = ["#FE1B04", "#fe3a26", "#fe5a49", "#ff7a6b", "#ff998d", "#ffb9b0", GREEN]
+    shades = ["#FE1B04", "#fe3a26", "#fe5a49", "#ff7a6b", "#ff998d", GREEN]
     return chart_url({
         "type": "horizontalBar",
         "data": {"labels": [k for k, _ in d["funnel"]],
                  "datasets": [{"data": [v for _, v in d["funnel"]], "backgroundColor": shades}]},
         "options": {"legend": {"display": False}, "scales": _axes(horizontal=True),
+                    "layout": {"padding": {"right": 30}},
                     "plugins": {"datalabels": {"anchor": "end", "align": "right",
                                                "color": INK, "font": {"weight": "bold"}}}},
     }, h=280)
@@ -369,7 +368,7 @@ def render_text(d):
     k = d["kpi"]
     out = [f"Harvey {CAMPAIGN} weekly report, {week_label(d)}", "", line, ""]
     for key, label in (("companies", "New companies"), ("contacts", "New contacts"),
-                       ("sent", "Emails sent"), ("replies", "Replies")):
+                       ("sent", "First emails sent"), ("replies", "Replies")):
         out.append(f"- {label}: {k[key][0]} ({delta(*k[key])[1]})")
     out += ["", "PER DAY (companies / emails sent)"]
     out += [f"- {x['date']}: {x['companies']} / {x['sent']}" for x in d["days"]]
@@ -437,7 +436,7 @@ def render_html(d):
         'cellpadding="0"><tr>',
         tile(k["companies"][0], "new companies", "companies", RED),
         tile(k["contacts"][0], "new contacts", "contacts", AMBER),
-        tile(k["sent"][0], "emails sent", "sent", INK),
+        tile(k["sent"][0], "first emails sent", "sent", INK),
         tile(k["replies"][0], "replies", "replies", GREEN),
         "</tr></table></td></tr>",
     ]
@@ -469,7 +468,7 @@ def render_html(d):
 
     parts.append(h2("New companies per day", f"Green = daily target of {d['daily_target']} reached"))
     parts.append(img(chart_daily(d), "New companies per day vs target"))
-    parts.append(h2("Last 8 weeks", "Companies found (bars) and emails sent (line)"))
+    parts.append(h2("Last 8 weeks", "Companies found (bars) and first emails sent (line)"))
     parts.append(img(chart_trend(d), "Companies found and emails sent, last 8 weeks"))
     parts.append(h2("Campaign funnel", "Since the start of H01"))
     parts.append(img(chart_funnel(d), "Campaign funnel"))
