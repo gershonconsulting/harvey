@@ -22,9 +22,25 @@ def test_two_named_people_before_the_general_inbox():
     assert f.greeting(keep, "Example") == "Hi Bob, Cy,"
 
 
-def test_general_inbox_greeting():
-    keep, _ = f.choose_two([row("1", "", "info@example.com")])
-    assert f.greeting(keep, "Example") == "Hi Example team,"
+def test_general_inbox_is_never_used():
+    keep, extra = f.choose_two([row("1", "", "contact@example.com"), row("2", "", "sales@example.com")])
+    assert keep == [] and len(extra) == 2
+    assert f.missing_contacts([row("1", "", "contact@example.com")]) == "no named CEO"
+
+
+def test_ceo_alone_or_no_ceo_is_held():
+    keep, _ = f.choose_two([row("3", "Bob", "bob@example.com", "CEO"), row("1", "", "contact@example.com")])
+    assert keep == []
+    assert f.missing_contacts([row("3", "Bob", "bob@example.com", "CEO")]) == "no +1 next to the CEO"
+    keep, _ = f.choose_two([row("2", "Ann", "ann@example.com", "Engineer"), row("5", "Dee", "dee@example.com", "Sales")])
+    assert keep == []
+
+
+def test_ceo_plus_one_any_role():
+    keep, _ = f.choose_two([row("2", "Ann", "ann@example.com", "Engineer"),
+                            row("3", "Bob", "bob@example.com", "Chief Executive Officer"),
+                            row("1", "", "contact@example.com")])
+    assert [r["fn"] for r in keep] == ["Bob", "Ann"]
 
 
 GOOD = """Hi Bob, Cy,
