@@ -356,8 +356,8 @@ def for_you(d):
         out.append((f"Review {d['drafts_in_gmail']} email(s) in Gmail Drafts",
                     "Send the ones you like from Gmail.", DRAFTS_LINK, "Open Drafts"))
     if d["paused"]:
-        out.append(("Decide: resume sending?", "Harvey paused itself after bounces. Reply OK and "
-                    "Claude resumes it once the bad addresses are removed.", SALES_LINK, "See status"))
+        out.append(("Decide: resume sending?", "Harvey paused itself after bounces. Tell Claude \"resume Harvey\" and it "
+                    "restarts once the bad addresses are removed.", SALES_LINK, "See status"))
     if d["leads"]:
         out.append((f"Answer {len(d['leads'])} interested prospect(s)",
                     ", ".join(f"{n or '?'} ({c or '?'})" for n, c, *_ in d["leads"][:5]),
