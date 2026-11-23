@@ -1,0 +1,9 @@
+[Unit]
+Description=Harvey H01 weekly report - every Monday 08:00 Sint Maarten (12:00 UTC)
+
+[Timer]
+OnCalendar=Mon *-*-* 12:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

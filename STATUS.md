@@ -1,4 +1,5 @@
 # STATUS - harvey (Gershon cold-email agent)
+- 2026-11-23: weekly report (scripts/gershon_weekly.py + deploy/harvey-weekly.{service,timer}, Mon 12:00 UTC) replaces harvey-daily + harvey-stats timers. Olivier: daily email made no sense.
 Updated: 2026-11-16
 
 ## State
