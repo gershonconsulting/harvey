@@ -355,6 +355,9 @@ def for_you(d):
     if d["drafts_in_gmail"]:
         out.append((f"Review {d['drafts_in_gmail']} email(s) in Gmail Drafts",
                     "Send the ones you like from Gmail.", DRAFTS_LINK, "Open Drafts"))
+    if d["paused"]:
+        out.append(("Decide: resume sending?", "Harvey paused itself after bounces. Reply OK and "
+                    "Claude resumes it once the bad addresses are removed.", SALES_LINK, "See status"))
     if d["leads"]:
         out.append((f"Answer {len(d['leads'])} interested prospect(s)",
                     ", ".join(f"{n or '?'} ({c or '?'})" for n, c, *_ in d["leads"][:5]),
@@ -377,7 +380,7 @@ def render_text(d):
     if probs:
         out += ["", "BROKEN"] + [f"- {h}. {w}" for h, w in probs]
     out += ["", f"COMPANIES THIS WEEK ({len(d['companies'])})"]
-    out += [f"- {c['name']} ({c['site']})" for c in d["companies"]] or ["- None."]
+    out += [f"- {c['name']}" + (f" ({c['site']})" if c["site"] else "") for c in d["companies"]] or ["- None."]
     out += ["", "CAMPAIGN SO FAR"] + [f"- {a}: {b}" for a, b in d["funnel"]]
     out += ["", f"Everything on {SALES_LINK}"]
     return "\n".join(out)
