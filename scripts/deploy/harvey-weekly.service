@@ -1,0 +1,10 @@
+[Unit]
+Description=Harvey H01 weekly report email (replaces the daily report and daily stats)
+After=network-online.target harvey.service
+
+[Service]
+Type=oneshot
+User=harvey
+WorkingDirectory=/opt/harvey
+ExecStart=/opt/harvey/.venv/bin/python /opt/harvey/scripts/gershon_weekly.py
+TimeoutStartSec=300
