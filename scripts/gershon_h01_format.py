@@ -18,6 +18,7 @@ State: data/gershon_h01_format.json {company_key: {"ids": [...], "hash": h}}
 import hashlib, json, re
 
 BOOKING = "https://www.gershonconsulting.com/calendar"
+REFS_LEAD = "we learned it working with similar companies:"
 
 # Field tags are for choosing; only the names go into the email.
 REFERENCE_CLIENTS = [
@@ -47,18 +48,29 @@ FORMAT = f"""THE EMAIL, plain text, exactly these parts in this order, nothing e
    no achievement, open with "I saw that <Company>" and the most specific fact
    about what they do, and do NOT write "Congratulations". Never invent an
    event, a date, a number, a customer or a source.
-3. One short paragraph on their US expansion: who would buy what they sell
-   in the US and why being visible to those US decision-makers matters. Only
-   from the FACTS; if the FACTS say nothing about the US, speak about the US
-   as their next market, never as something they already did.
+3. One short paragraph on the reasons for a US expansion in THEIR very
+   focused industry (the narrow niche they sell in, not "software" or "tech"
+   in general): what is driving US demand for that kind of product right now
+   (a shortage, a regulation, a buying trend, a shift in how US companies
+   work), ending with why that makes the US a natural next market for this
+   company. Use only drivers that are well known for that niche; no
+   statistics, no figures, no named sources. If the FACTS say nothing about
+   the US, speak about the US as their next market, never as something they
+   already did.
 4. This paragraph, word for word:
    "Gershon Consulting is a US-focused digital marketing company. Since 2013
    we have supported the US expansion of international companies with our
    Hunter method (Promote, Network, Engage), building their visibility with
    the right US decision-makers."
-5. "Similar companies worked with us: " followed by 2 or 3 names from the
-   REFERENCE CLIENTS list, the closest to this company's field, separated by
-   commas, ending with a full stop. Never a name that is not on the list.
+5. One short paragraph on the challenge of reaching THIS company's ICP in the
+   US: who actually chooses and buys their product in US companies (the
+   specific roles, e.g. operations, safety and innovation leaders rather than
+   IT alone) and why those people are hard to identify or reach from outside
+   the US. End the paragraph with exactly:
+   "We know this challenge well, and we learned it working with similar
+   companies: " followed by 2 or 3 names from the REFERENCE CLIENTS list, the
+   closest to this company's field, separated by commas, ending with a full
+   stop. Never a name that is not on the list.
 6. This paragraph, word for word:
    "If you think an organization that has helped more than 200 companies at
    the same stage as yours grow their business in the US over the past 13
@@ -161,7 +173,7 @@ def check_email(subject, body, keep, company):
         problems.append("greeting")
     for must in ("Gershon Consulting is a US-focused digital marketing company.",
                  "Hunter method (Promote, Network, Engage)",
-                 "Similar companies worked with us:",
+                 REFS_LEAD,
                  "more than 200 companies",
                  f"My calendar is open at {BOOKING}",
                  "I also sent you a similar message on LinkedIn"):
@@ -169,7 +181,7 @@ def check_email(subject, body, keep, company):
             problems.append(f"missing: {must[:40]}")
     if len(re.findall(r"https?://", body)) != 1:
         problems.append("links")
-    names_used = re.search(r"Similar companies worked with us:([^\n]*)", body)
+    names_used = re.search(re.escape(REFS_LEAD) + r"([^\n]*)", re.sub(r"[ \t]*\n(?!\n)[ \t]*", " ", body))
     if names_used:
         allowed = {n for n, _ in REFERENCE_CLIENTS}
         used = [n.strip(" .") for n in re.split(r",| and ", names_used.group(1)) if n.strip(" .")]

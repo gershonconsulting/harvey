@@ -47,11 +47,11 @@ GOOD = """Hi Bob, Cy,
 
 Congratulations on the launch of your new platform in March. It opens a bigger market.
 
-The US is a natural next market for a platform like yours.
+US logistics operators are automating warehouses fast because of labour shortages, which makes the US a natural next market for a platform like yours.
 
 Gershon Consulting is a US-focused digital marketing company. Since 2013 we have supported the US expansion of international companies with our Hunter method (Promote, Network, Engage), building their visibility with the right US decision-makers.
 
-Similar companies worked with us: Centreon, Wallix.
+In US companies this is chosen by operations leaders, not IT alone, and they are hard to reach from outside the US. We know this challenge well, and we learned it working with similar companies: Centreon, Wallix.
 
 If you think an organization that has helped more than 200 companies at the same stage as yours grow their business in the US over the past 13 years could help, today or in the near future, would it make sense to introduce ourselves?
 
@@ -70,3 +70,13 @@ def test_unknown_reference_client_or_sign_off_is_refused():
     assert "reference clients" in f.check_email("x", GOOD.replace("Wallix", "Acme Corp"), keep, "Example")
     assert "sign-off in body" in f.check_email("x", GOOD + "\n\nSpeak with you soon,", keep, "Example")
     assert "greeting" in f.check_email("x", GOOD.replace("Hi Bob, Cy,", "Hi Bob,"), keep, "Example")
+
+
+def test_old_references_line_is_refused():
+    keep, _ = f.choose_two([row("3", "Bob", "bob@example.com", "CEO"), row("4", "Cy", "cy@example.com", "Founder")])
+    old = GOOD.replace("In US companies this is chosen by operations leaders, not IT alone, and they are hard to reach from outside the US. We know this challenge well, and we learned it working with similar companies:", "Similar companies worked with us:")
+    assert any(p.startswith("missing: we learned it") for p in f.check_email("x", old, keep, "Example"))
+
+
+def test_format_asks_for_industry_reasons_and_icp_challenge():
+    assert "very\n   focused industry" in f.FORMAT and "ICP in the\n   US" in f.FORMAT
