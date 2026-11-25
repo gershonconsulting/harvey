@@ -1137,8 +1137,12 @@ class Scout:
         geos = self.config.icp.geography or [""]
         size = self.config.icp.company_size or ""
 
-        for industry in industries[:2]:
-            geo = geos[0] if geos else ""
+        # Rotate through every target country, one per day, so each gets
+        # its share of new companies (geography[0] only, before).
+        import datetime as _dt
+        day = _dt.date.today().toordinal()
+        for i, industry in enumerate(industries[:2]):
+            geo = geos[(day + i) % len(geos)] if geos else ""
 
             parts = []
             if industry:

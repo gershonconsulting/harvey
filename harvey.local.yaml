@@ -50,8 +50,12 @@ icp:
   - Directeur
   geography:
   - United Kingdom
-  - Germany
   - Netherlands
+  - France
+  - Sweden
+  - Denmark
+  - Norway
+  - Finland
   hiring_signals:
   - Head of US Sales
   - US Sales
@@ -64,7 +68,7 @@ channels:
   email:
     enabled: true
     provider: gmail
-    max_daily_sends: 30
+    max_daily_sends: 40
     require_approval: true
     send_to_risky: false
     max_bounce_rate: 0.05
