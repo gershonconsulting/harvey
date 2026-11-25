@@ -52,3 +52,22 @@ def test_follow_up_waits_for_the_previous_send_and_its_delay():
     assert not g.follow_up_ready({}, None, 3, now)
     # never sooner than the minimum gap, even with a 0-day plan
     assert not g.follow_up_ready({}, {"status": "sent", "sent_at": (now - timedelta(days=1)).isoformat()}, 0, now)
+
+
+def test_h01_autosend_gate_is_off_unless_enabled_and_respects_pause(monkeypatch):
+    import asyncio, importlib.util, types
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        "gd_autosend", Path(__file__).resolve().parent.parent / "scripts" / "gershon_gmail_drafts.py")
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    monkeypatch.delenv("GERSHON_H01_AUTOSEND", raising=False)
+
+    class St:
+        def __init__(self, paused): self.paused = paused
+        async def get_setting(self, k, d=""): return "1" if self.paused else ""
+        async def count_outbox_sent_today(self, *a, **k): return 0
+
+    log = []
+    assert asyncio.run(m.autosend_gate(St(False), None, {}, log)) is None
+    assert asyncio.run(m.autosend_gate(St(True), None, {"GERSHON_H01_AUTOSEND": "1"}, log)) is None
+    assert "paused" in log[-1]
