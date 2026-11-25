@@ -325,6 +325,14 @@ INTENT_WORDS = {
 }
 
 
+def is_real_failure(err):
+    """True only for a send that actually broke. Addresses Harvey held back (risky /
+    not deliverable) or that Gershon kept out of the campaign on purpose ("kept out of
+    H01 ... closed") are by design and must not raise a "failed to send" alert."""
+    e = (err or "").lower()
+    return not ("risky" in e or "not deliverable" in e or "kept out of" in e)
+
+
 def plain_problem(err):
     e = (err or "").lower()
     if "risky" in e or "not deliverable" in e or "invalid" in e:
@@ -428,9 +436,8 @@ def main():
                        "(Harvey drafts a reply in Gmail Drafts when it can).")
     new_err = [e for e in s["errors"] if e not in prev.get("errors", [])]
     if new_err and prev:
-        real = [e for e in new_err if "risky" not in (e[2] or "").lower()
-                and "not deliverable" not in (e[2] or "").lower()]
-        if real:  # held-back risky addresses are Harvey working as intended, not news
+        real = [e for e in new_err if is_real_failure(e[2])]
+        if real:  # held-back or kept-out addresses are Harvey working as intended, not news
             alerts.append((True, f"{len(real)} email(s) failed to send"))
             details += [f"- {e[0]}: {plain_problem(e[2])}" for e in real]
     state = {k: s[k] for k in ("service", "brain_ready", "pending_review", "prospect_replies", "errors")}
