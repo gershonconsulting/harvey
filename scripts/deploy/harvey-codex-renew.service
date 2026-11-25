@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep Harvey's ChatGPT/Codex login fresh
+
+[Service]
+Type=oneshot
+User=harvey
+WorkingDirectory=/opt/harvey
+Environment=HOME=/home/harvey
+Environment=PATH=/opt/harvey/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/harvey/.venv/bin/python /opt/harvey/scripts/gershon_codex_renew.py
+TimeoutStartSec=300

@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew Harvey Codex login as soon as it turns 8 days old (checks every 15 min)
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

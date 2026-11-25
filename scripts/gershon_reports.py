@@ -79,6 +79,27 @@ def prospect_wrote(thread_json):
         return False
     return any(isinstance(m, dict) and m.get("sender") == "prospect" for m in msgs)
 
+def in_gmail_drafts():
+    """Emails really sitting in Gmail Drafts: pending rows the drafts sync put there."""
+    try:
+        tracked = json.loads((ROOT / "data" / "gmail_drafts.json").read_text())
+    except Exception:
+        return 0
+    ids = [r[0] for r in q("SELECT id FROM outbox WHERE status='pending_review'")]
+    return sum(1 for i in ids if i in tracked)
+
+
+def login_auto_renewing():
+    """Codex renews the login itself once it is 8 days old (harvey-codex-renew checks
+    every 15 min); Harvey pauses 1h before that. Not an outage, so no red alert."""
+    try:
+        lr = json.loads(open("/home/harvey/.codex/auth.json").read())["last_refresh"]
+        lr = datetime.fromisoformat(lr.replace("Z", "")[:26]).replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - lr).total_seconds() / 3600
+        return 8 * 24 - 2 <= age <= 8 * 24 + 1
+    except Exception:
+        return False
+
 
 def snapshot():
     status = sh([str(ROOT / ".venv/bin/harvey"), "status", "--check"])
@@ -93,11 +114,12 @@ def snapshot():
     sent_24h = q("SELECT COUNT(*) FROM outbox WHERE sent_at >= datetime('now','-1 day')")
     return {
         "service": service,
-        "brain_ready": "NOT READY" not in status,
+        "brain_ready": "NOT READY" not in status or login_auto_renewing(),
         "status_text": status,
         "outbox": outbox,
         "prospects": prospects,
         "pending_review": outbox.get("pending_review", 0),
+        "in_drafts": in_gmail_drafts(),
         "open_conversations": open_conv[0][0] if open_conv else 0,
         # every inbox message Harvey looked at (newsletters included), NOT prospect replies
         "inbox_checked": replies[0][0] if replies else 0,
@@ -319,8 +341,8 @@ def alert_body(headline, details, s):
     out = [headline, ""]
     out += details
     out += ["", "Where things stand"]
-    if s["pending_review"]:
-        out.append(f"- {s['pending_review']} emails waiting for you in Gmail Drafts: {GMAIL_DRAFTS_LINK}")
+    if s.get("in_drafts"):
+        out.append(f"- {s['in_drafts']} emails waiting for you in Gmail Drafts: {GMAIL_DRAFTS_LINK}")
     out.append(f"- Emails sent in the last 24h: {s['sent_24h']}")
     out.append(f"- Harvey: {'running' if s['service'] == 'active' else s['service'].upper()}"
                f" · ChatGPT login: {'OK' if s['brain_ready'] else 'EXPIRED'}")

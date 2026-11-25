@@ -167,6 +167,34 @@ def make_draft_provider(cfg, env):
     return DraftProvider(cfg, env)
 
 
+AUTOSEND_PER_RUN = 2  # companies per 10-minute run, so sends are spread out
+
+
+async def autosend_gate(st, cfg, env, log, dry=False):
+    """H01 auto-send (GERSHON_H01_AUTOSEND=1 in .env): None unless every one of
+    Harvey's own send guards allows sending now. Follow-ups and replies always
+    stay in Gmail Drafts; only formatted H01 first emails are sent."""
+    flag = (env.get("GERSHON_H01_AUTOSEND") if hasattr(env, "get") else None) or os.environ.get("GERSHON_H01_AUTOSEND", "")
+    if str(flag).strip() not in ("1", "true", "yes"):
+        return None
+    if await st.get_setting("sending_paused"):
+        log.append("autosend off: Harvey sending is paused (kill switch)")
+        return None
+    try:
+        from harvey.main import in_quiet_hours
+        if in_quiet_hours(cfg):
+            log.append("autosend waits: quiet hours")
+            return None
+    except Exception:  # noqa: BLE001
+        pass
+    left = cfg.channels.email.max_daily_sends - await st.count_outbox_sent_today()
+    if left <= 0:
+        log.append("autosend waits: daily send limit reached")
+        return None
+    from harvey.integrations.gmail import GmailProvider
+    return {"provider": GmailProvider(cfg, env), "left": min(left, AUTOSEND_PER_RUN * 2)}
+
+
 async def main(dry=False):
     os.chdir(ROOT); sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
     from harvey.config import load_config, load_env
@@ -322,6 +350,8 @@ async def main(dry=False):
     # 4. new drafts (a company's two first emails share one draft)
     import gershon_h01_format as fmt
     made, batches = [], {}
+    autosend = await autosend_gate(st, cfg, env, log)
+    sent_now = []
     for r in pending:
         if r["id"] in tracked or dismissed.get(r["id"]) == content_hash(r["subject"], r["body"]):
             continue
@@ -352,6 +382,26 @@ async def main(dry=False):
             log.append(f"would draft: {label} | {r['subject']}")
             continue
         to = ", ".join(dict.fromkeys(x["to_email"] for x in grp))
+        if bkey[0] == "s1" and autosend and autosend["left"] >= len(grp):
+            # Olivier 2026-11-24: an H01 first email in his format needs no approval.
+            # Only reached when the CEO + 1 rule and the format checks passed (step 3).
+            res = await autosend["provider"].send_email(to, r["subject"], body)
+            if not res.ok:
+                log.append(f"AUTOSEND FAIL {to}: {res.error}")
+                continue
+            for x in grp:
+                await st.update_outbox_item(x["id"], status="sent", sent_at=now.isoformat(timespec="seconds"),
+                                            message_id=getattr(res, "message_id", "") or "",
+                                            thread_ref=getattr(res, "thread_ref", "") or "",
+                                            provider="gmail", error="")
+                if x.get("prospect_id"):
+                    p = await st.get_prospect(x["prospect_id"])
+                    if p and p.status in ("new", "queued"):
+                        await st.update_prospect_status(p.id, "contacted")
+                await st.log_action("email_sent", "gershon_h01_autosend", {"to": x["to_email"], "step": 1})
+            autosend["left"] -= len(grp)
+            sent_now.append(f"- {label}: {r['subject']}")
+            continue
         res = await provider.send_email(to, r["subject"], body, thread_ref=thread, in_reply_to=reply_to)
         if not res.ok:
             log.append(f"FAIL {to}: {res.error}")
@@ -379,7 +429,9 @@ async def main(dry=False):
             log.append(f"notice email failed: {e}")
     if OLD_DONE.exists() and STATE_FILE.exists() and not dry:
         OLD_DONE.rename(OLD_DONE.with_suffix(".json.old"))
-    log.append(f"new drafts: {len(made)} | waiting in Harvey: {len(pending)}")
+    if sent_now:
+        log.append("auto-sent H01:\n" + "\n".join(sent_now))
+    log.append(f"new drafts: {len(made)} | auto-sent: {len(sent_now)} | waiting in Harvey: {len(pending)}")
     print("\n".join(log))
 
 

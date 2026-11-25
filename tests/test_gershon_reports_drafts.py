@@ -97,3 +97,28 @@ def test_with_gmail_review_no_draft_email_and_no_waiting_alert(tmp_path, monkeyp
          "errors": [], "status_text": ""}
     assert mod.GMAIL_DRAFTS_LINK in mod.fmt(s, {})
     assert mod.GMAIL_DRAFTS_LINK not in mod.fmt(s, {"GMAIL_DRAFTS": "0"})
+
+
+def test_alert_counts_only_emails_really_in_gmail_drafts(tmp_path, monkeypatch):
+    mod = load(tmp_path, monkeypatch)
+    make_db(mod.DB, [])
+    con = sqlite3.connect(mod.DB)
+    for i in ("a", "b", "c"):
+        con.execute("INSERT INTO outbox (id, to_email, status, step) VALUES (?, ?, 'pending_review', 1)",
+                    (i, f"{i}@example.com"))
+    con.commit()
+    (tmp_path / "data" / "gmail_drafts.json").write_text(json.dumps({"a": {"draft": "d1"}}))
+    assert mod.in_gmail_drafts() == 1
+    s = {"pending_review": 3, "in_drafts": 0, "sent_24h": 0, "service": "active", "brain_ready": True}
+    assert "Gmail Drafts" not in mod.alert_body("x", [], s)
+    s["in_drafts"] = 1
+    assert "- 1 emails waiting for you in Gmail Drafts" in mod.alert_body("x", [], s)
+
+
+def test_codex_renew_age():
+    import importlib.util as u
+    from datetime import datetime, timezone
+    spec = u.spec_from_file_location("renew", SCRIPT.parent / "gershon_codex_renew.py")
+    m = u.module_from_spec(spec); spec.loader.exec_module(m)
+    now = datetime(2026, 11, 25, 1, 20, 39, tzinfo=timezone.utc)
+    assert round(m.age_hours("2026-11-17T01:20:39.603760577Z", now)) == 192
